@@ -324,20 +324,10 @@ public class ElytraPlus extends Module {
         }
 
         if (e.getPacket() instanceof PlayerPositionLookS2CPacket) {
-            PlayerPositionLookS2CPacket p = (PlayerPositionLookS2CPacket) e.getPacket();
-            if (this.isEnabled() && mode.getValue() == Mode.Boost) {
-                double dist = mc.player.getPos().distanceTo(new Vec3d(p.getX(), p.getY(), p.getZ()));
-                if (dist < 1.1) {
-                    mc.getNetworkHandler().sendPacket(new TeleportConfirmC2SPacket(p.getTeleportId()));
-                    e.cancel();
-                    return;
-                }
-            }
             acceleration = 0;
             accelerationY = 0;
             pingTimer.reset();
-        }
-        
+
             if (disableOnFlag.getValue() && mode.is(Mode.FireWork))
                 disable(isRu() ? "Выключен из-за флага!" : "Disabled due to flag!");
         }
@@ -511,16 +501,30 @@ public class ElytraPlus extends Module {
             if (forceHeight.getValue()) height = manualHeight.getValue();
 
             if(twoBee.getValue()) {
-            if (mc.options.keyJump.isPressed() || !onlySpace.getValue() || cruiseControl.getValue()) {
-               double tSpeed = (double) factor.getValue() / 10.0;
-               double[] m = MovementUtility.forwardWithoutStrafe(tSpeed);
-               
-               //
-               e.setX(MathUtility.lerp(e.getX(), e.getX() + m[0], 0.18));
-               e.setZ(MathUtility.lerp(e.getZ(), e.getZ() + m[1], 0.18));
-            }
+                if (Managers.PLAYER.currentPlayerSpeed >= minUpSpeed.getValue())
+                    mc.player.setPitch((float) MathHelper.clamp(MathHelper.wrapDegrees(Math.toDegrees(Math.atan2((height - mc.player.getY()) * -1.0, 10))), -50, 50));
+                else
+                    mc.player.setPitch(0.25F);
+            } else {
+                double heightPct = 1 - Math.sqrt(MathHelper.clamp(Managers.PLAYER.currentPlayerSpeed / 1.7, 0.0, 1.0));
+                if (Managers.PLAYER.currentPlayerSpeed >= minUpSpeed.getValue() && startTimer.passedMs((long) (2000 * redeployInterval.getValue()))) {
+                    double pitch = -(44.4 * heightPct + 0.6);
+                    double diff = (height + 1 - mc.player.getY()) * 2;
+                    double pDist = -Math.toDegrees(Math.atan2(Math.abs(diff), Managers.PLAYER.currentPlayerSpeed * 30.0)) * Math.signum(diff);
+                    mc.player.setPitch((float) (pitch + (pDist - pitch) * MathHelper.clamp(Math.abs(diff), 0.0, 1.0)));
+                } else {
+                    mc.player.setPitch(0.25F);
                     moveForward = 1;
                 }
+            }
+        }
+
+        if(twoBee.getValue()) {
+            if ((mc.options.jumpKey.isPressed() || !onlySpace.getValue() || cruiseControl.getValue())) {
+                double[] m = MovementUtility.forwardWithoutStrafe((factor.getValue() / 10f));
+                e.setX(e.getX() + m[0]);
+                e.setZ(e.getZ() + m[1]);
+            }
         } else {
             Vec3d rotationVec = mc.player.getRotationVec(Render3DEngine.getTickDelta());
 
