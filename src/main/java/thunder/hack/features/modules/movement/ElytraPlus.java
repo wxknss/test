@@ -110,7 +110,6 @@ public class ElytraPlus extends Module {
     private final thunder.hack.utility.Timer strictTimer = new thunder.hack.utility.Timer();
     private final thunder.hack.utility.Timer pingTimer = new thunder.hack.utility.Timer();
     
-    // НОВЫЕ ПЕРЕМЕННЫЕ ДЛЯ СИНХРОНИЗАЦИИ
     private final thunder.hack.utility.Timer boostCooldownTimer = new thunder.hack.utility.Timer();
     private boolean waitingForConfirm = false;
     private long lastBoostTime = 0;
@@ -333,7 +332,6 @@ public class ElytraPlus extends Module {
             accelerationY = 0;
             pingTimer.reset();
             
-            // НОВЫЙ КОД: для Boost режима сервер подтвердил позицию
             if (mode.is(Mode.Boost) && waitingForConfirm) {
                 waitingForConfirm = false;
                 boostCooldownTimer.reset();
@@ -500,7 +498,6 @@ public class ElytraPlus extends Module {
         }
     }
 
-    // НОВЫЙ МЕТОД ДЛЯ ПОЛУЧЕНИЯ ПИНГА
     private int getCurrentPing() {
         if (mc.getNetworkHandler() == null) return 0;
         var playerEntry = mc.getNetworkHandler().getPlayerListEntry(mc.player.getUuid());
@@ -513,18 +510,14 @@ public class ElytraPlus extends Module {
             return;
         }
 
-        // ===== МЯГКАЯ СИНХРОНИЗАЦИЯ =====
         int currentPing = getCurrentPing();
         if (currentPing == 0) currentPing = 140;
         
-        // задержка между бустами (0.8 * пинг, но не меньше 60 и не больше 300 мс)
         long minDelay = Math.min(300, Math.max(60, (long)(currentPing * 0.8)));
         
-        // если не прошло достаточно времени — пропускаем этот тик
         if (!boostCooldownTimer.passedMs(minDelay)) {
             return;
         }
-        // ===== КОНЕЦ СИНХРОНИЗАЦИИ =====
 
         float moveForward = mc.player.input.movementForward;
 
@@ -613,8 +606,24 @@ public class ElytraPlus extends Module {
         mc.player.setVelocity(e.getX(), e.getY(), e.getZ());
         e.cancel();
         
-        // сбрасываем таймер после буста
         boostCooldownTimer.reset();
+    }
+
+    private void doControl(EventMove e) {
+        if (mc.player.getInventory().getStack(38).getItem() != Items.ELYTRA || !mc.player.isFallFlying()) {
+            return;
+        }
+
+        double[] dir = MovementUtility.forward(xzSpeed.getValue() * (accelerate.getValue().isEnabled() ? Math.min((acceleration += accelerateFactor.getValue()) / 100.0f, 1.0f) : 1f));
+        e.setX(dir[0]);
+        e.setY(mc.options.jumpKey.isPressed() ? upSpeed.getValue() : mc.options.sneakKey.isPressed() ? -sneakDownSpeed.getValue() : -0.08 * downFactor.getValue());
+        e.setZ(dir[1]);
+
+        if (!MovementUtility.isMoving())
+            acceleration = 0;
+
+        mc.player.setVelocity(e.getX(), e.getY(), e.getZ());
+        e.cancel();
     }
 
     public void matrixDisabler(int elytra) {
