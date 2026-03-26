@@ -25,8 +25,8 @@ public class TotemPopCounter extends Module {
         if (event.getEntity() == mc.player) return;
 
         String s;
-        if (isRu()) s = Formatting.GREEN + event.getEntity().getName().getString() + Formatting.WHITE + " попнул " + Formatting.AQUA + (event.getPops() > 1 ? event.getPops() + "" + Formatting.WHITE + " тотемов!" : Formatting.WHITE + "тотем!");
-        else s = Formatting.GREEN + event.getEntity().getName().getString() + Formatting.WHITE + " popped " + Formatting.AQUA + (event.getPops() > 1 ? event.getPops() + "" + Formatting.WHITE + " totems!" : Formatting.WHITE + " a totem!");
+        if (isRu()) s = Formatting.GREEN + event.getEntity().getName().getString() + Formatting.WHITE + " сел(а) на дилдо " + Formatting.AQUA + (event.getPops() > 1 ? event.getPops() + "" + Formatting.WHITE + " и хочет еще!" : Formatting.WHITE + " один раз!");
+        else s = Formatting.GREEN + event.getEntity().getName().getString() + Formatting.WHITE + " popped " + Formatting.AQUA + (event.getPops() > 1 ? event.getPops() + "" + Formatting.WHITE + " и хочет еще!" : Formatting.WHITE + " один раз!");
 
         sendMessage(s);
         if (notification.getValue())
@@ -40,8 +40,8 @@ public class TotemPopCounter extends Module {
                 continue;
 
             String s;
-            if (isRu()) s = Formatting.GREEN + player.getName().getString() + Formatting.WHITE + " попнул " + (Managers.COMBAT.popList.get(player.getName().getString()) > 1 ? Managers.COMBAT.popList.get(player.getName().getString()) + "" + Formatting.WHITE + " тотемов и сдох!" : Formatting.WHITE + "тотем и сдох!");
-            else s = Formatting.GREEN + player.getName().getString() + Formatting.WHITE + " popped " + (Managers.COMBAT.popList.get(player.getName().getString()) > 1 ? Managers.COMBAT.popList.get(player.getName().getString()) + "" + Formatting.WHITE + " totems and died EZ LMAO!" : Formatting.WHITE + "totem and died EZ LMAO!");
+            if (isRu()) s = Formatting.GREEN + player.getName().getString() + Formatting.WHITE + " сел(а) на дилдо " + (Managers.COMBAT.popList.get(player.getName().getString()) > 1 ? Managers.COMBAT.popList.get(player.getName().getString()) + "" + Formatting.WHITE + " раз и обосрался(ась)" : Formatting.WHITE + "всего раз и обосрался(ась)");
+            else s = Formatting.GREEN + player.getName().getString() + Formatting.WHITE + " сел(а) на дилдо " + (Managers.COMBAT.popList.get(player.getName().getString()) > 1 ? Managers.COMBAT.popList.get(player.getName().getString()) + "" + Formatting.WHITE + " раз и обосрался(ась)" : Formatting.WHITE + "всего раз и обосрался(ась)");
 
             sendMessage(s);
             if (notification.getValue())
