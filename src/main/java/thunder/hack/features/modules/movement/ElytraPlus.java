@@ -323,10 +323,21 @@ public class ElytraPlus extends Module {
                     e.cancel();
         }
 
-        if (e.getPacket() instanceof PlayerPositionLookS2CPacket) {
-            acceleration = 0;
-            accelerationY = 0;
-            pingTimer.reset();
+      if (e.getPacket() instanceof PlayerPositionLookS2CPacket) {
+         PlayerPositionLookS2CPacket p = (PlayerPositionLookS2CPacket) e.getPacket();
+         if (this.isEnabled() && mode.getValue() == Mode.Boost) {
+            double dist = mc.player.getPos().distanceTo(new Vec3d(p.getX(), p.getY(), p.getZ()));
+            // Если откат меньше 1.1 метра - подтверждаем серверу, но не дергаем камеру
+            if (dist < 1.1) {
+               mc.getNetworkHandler().sendPacket(new TeleportConfirmC2SPacket(p.getTeleportId()));
+               e.cancel();
+               return;
+            }
+         }
+         acceleration = 0;
+         accelerationY = 0;
+         pingTimer.reset();
+      }
 
             if (disableOnFlag.getValue() && mode.is(Mode.FireWork))
                 disable(isRu() ? "Выключен из-за флага!" : "Disabled due to flag!");
@@ -519,11 +530,16 @@ public class ElytraPlus extends Module {
             }
         }
 
-        if(twoBee.getValue()) {
-            if ((mc.options.jumpKey.isPressed() || !onlySpace.getValue() || cruiseControl.getValue())) {
-                double[] m = MovementUtility.forwardWithoutStrafe((factor.getValue() / 10f));
-                e.setX(e.getX() + m[0]);
-                e.setZ(e.getZ() + m[1]);
+          if (twoBee.getValue()) {
+               if (mc.options.jumpKey.isPressed() || !onlySpace.getValue() || cruiseControl.getValue()) {
+                  double tSpeed = (double) factor.getValue() / 10.0;
+                  double[] m = MovementUtility.forwardWithoutStrafe(tSpeed);
+                  
+                  // ТА САМАЯ ПЛАВНОСТЬ (LERP)
+                  e.setX(MathUtility.lerp(e.getX(), e.getX() + m[0], 0.18));
+                  e.setZ(MathUtility.lerp(e.getZ(), e.getZ() + m[1], 0.18));
+                  moveForward = 1.0f;
+               }
             }
         } else {
             Vec3d rotationVec = mc.player.getRotationVec(Render3DEngine.getTickDelta());
