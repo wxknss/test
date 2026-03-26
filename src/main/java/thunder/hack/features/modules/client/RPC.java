@@ -30,8 +30,8 @@ public final class RPC extends Module {
     private final Timer timer_delay = new Timer();
     private static Thread thread;
     String slov;
-    String[] rpc_perebor_en = {"Parkour", "Reporting cheaters", "Touching grass", "Asks how to bind", "Reporting bugs", "Watching Kilab"};
-    String[] rpc_perebor_ru = {"Паркурит", "Репортит читеров", "Трогает траву", "Спрашивает как забиндить", "Репортит баги", "Смотрит Флюгера"};
+    String[] rpc_perebor_en = {"Спит", "Ворую у VeivVovi пазики", "Пишу 101 способ как в ссать в трусы", "НОУ УРУРУ", "Ты любопытный(ая) дядя/тетя", "София чудо"};
+    String[] rpc_perebor_ru = {"Спит", "Ворую у VeivVovi пазики", "Пишу 101 способ как в ссать в трусы", "НОУ УРУРУ", "Ты любопытный(ая) дядя/тетя", "София чудо"};
     int randomInt;
 
     public RPC() {
