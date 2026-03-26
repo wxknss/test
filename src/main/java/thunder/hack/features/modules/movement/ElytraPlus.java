@@ -109,6 +109,11 @@ public class ElytraPlus extends Module {
     private final thunder.hack.utility.Timer redeployTimer = new thunder.hack.utility.Timer();
     private final thunder.hack.utility.Timer strictTimer = new thunder.hack.utility.Timer();
     private final thunder.hack.utility.Timer pingTimer = new thunder.hack.utility.Timer();
+    
+    // НОВЫЕ ПЕРЕМЕННЫЕ ДЛЯ СИНХРОНИЗАЦИИ
+    private final thunder.hack.utility.Timer boostCooldownTimer = new thunder.hack.utility.Timer();
+    private boolean waitingForConfirm = false;
+    private long lastBoostTime = 0;
 
     private boolean infiniteFlag, hasTouchedGround, elytraEquiped, flying, started;
     private float acceleration, accelerationY, height, prevClientPitch, infinitePitch, lastInfinitePitch;
@@ -327,6 +332,12 @@ public class ElytraPlus extends Module {
             acceleration = 0;
             accelerationY = 0;
             pingTimer.reset();
+            
+            // НОВЫЙ КОД: для Boost режима сервер подтвердил позицию
+            if (mode.is(Mode.Boost) && waitingForConfirm) {
+                waitingForConfirm = false;
+                boostCooldownTimer.reset();
+            }
 
             if (disableOnFlag.getValue() && mode.is(Mode.FireWork))
                 disable(isRu() ? "Выключен из-за флага!" : "Disabled due to flag!");
@@ -489,9 +500,40 @@ public class ElytraPlus extends Module {
         }
     }
 
+    // НОВЫЙ МЕТОД ДЛЯ ПОЛУЧЕНИЯ ПИНГА
+    private int getCurrentPing() {
+        if (mc.getNetworkHandler() == null) return 0;
+        var playerEntry = mc.getNetworkHandler().getPlayerListEntry(mc.player.getUuid());
+        if (playerEntry == null) return 0;
+        return playerEntry.getLatency();
+    }
+
+    // ПОЛНОСТЬЮ ПЕРЕПИСАННЫЙ МЕТОД doBoost
     private void doBoost(EventMove e) {
-        if (mc.player.getInventory().getStack(38).getItem() != Items.ELYTRA || !mc.player.isFallFlying() || mc.player.isTouchingWater() || mc.player.isInLava() || !mc.player.isFallFlying())
+        if (mc.player.getInventory().getStack(38).getItem() != Items.ELYTRA || !mc.player.isFallFlying() || mc.player.isTouchingWater() || mc.player.isInLava()) {
             return;
+        }
+
+        // === НОВАЯ ЛОГИКА: ожидание подтверждения ===
+        
+        int currentPing = getCurrentPing();
+        if (currentPing == 0) currentPing = 140;  // твой пинг по умолчанию
+        
+        // таймаут: если ждем больше 2 секунд, разблокируем
+        if (waitingForConfirm && System.currentTimeMillis() - lastBoostTime > 2000) {
+            waitingForConfirm = false;
+            boostCooldownTimer.reset();
+        }
+        
+        // задержка = пинг * 1.5, но не меньше 80 и не больше 400 мс
+        long minDelay = Math.min(400, Math.max(80, (long)(currentPing * 1.5)));
+        
+        // если ждем подтверждение ИЛИ еще не прошла задержка — пропускаем тик
+        if (waitingForConfirm || !boostCooldownTimer.passedMs(minDelay)) {
+            return;
+        }
+        
+        // === КОНЕЦ НОВОЙ ЛОГИКИ ===
 
         float moveForward = mc.player.input.movementForward;
 
@@ -579,6 +621,10 @@ public class ElytraPlus extends Module {
 
         mc.player.setVelocity(e.getX(), e.getY(), e.getZ());
         e.cancel();
+        
+        // после отправки буста — ждем подтверждения от сервера
+        lastBoostTime = System.currentTimeMillis();
+        waitingForConfirm = true;
     }
 
     private void doControl(EventMove e) {
