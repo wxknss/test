@@ -508,32 +508,23 @@ public class ElytraPlus extends Module {
         return playerEntry.getLatency();
     }
 
-    // ПОЛНОСТЬЮ ПЕРЕПИСАННЫЙ МЕТОД doBoost
     private void doBoost(EventMove e) {
         if (mc.player.getInventory().getStack(38).getItem() != Items.ELYTRA || !mc.player.isFallFlying() || mc.player.isTouchingWater() || mc.player.isInLava()) {
             return;
         }
 
-        // === НОВАЯ ЛОГИКА: ожидание подтверждения ===
-        
+        // ===== МЯГКАЯ СИНХРОНИЗАЦИЯ =====
         int currentPing = getCurrentPing();
-        if (currentPing == 0) currentPing = 140;  // твой пинг по умолчанию
+        if (currentPing == 0) currentPing = 140;
         
-        // таймаут: если ждем больше 2 секунд, разблокируем
-        if (waitingForConfirm && System.currentTimeMillis() - lastBoostTime > 2000) {
-            waitingForConfirm = false;
-            boostCooldownTimer.reset();
-        }
+        // задержка между бустами (0.8 * пинг, но не меньше 60 и не больше 300 мс)
+        long minDelay = Math.min(300, Math.max(60, (long)(currentPing * 0.8)));
         
-        // задержка = пинг * 1.5, но не меньше 80 и не больше 400 мс
-        long minDelay = Math.min(400, Math.max(80, (long)(currentPing * 1.5)));
-        
-        // если ждем подтверждение ИЛИ еще не прошла задержка — пропускаем тик
-        if (waitingForConfirm || !boostCooldownTimer.passedMs(minDelay)) {
+        // если не прошло достаточно времени — пропускаем этот тик
+        if (!boostCooldownTimer.passedMs(minDelay)) {
             return;
         }
-        
-        // === КОНЕЦ НОВОЙ ЛОГИКИ ===
+        // ===== КОНЕЦ СИНХРОНИЗАЦИИ =====
 
         float moveForward = mc.player.input.movementForward;
 
@@ -622,25 +613,8 @@ public class ElytraPlus extends Module {
         mc.player.setVelocity(e.getX(), e.getY(), e.getZ());
         e.cancel();
         
-        // после отправки буста — ждем подтверждения от сервера
-        lastBoostTime = System.currentTimeMillis();
-        waitingForConfirm = true;
-    }
-
-    private void doControl(EventMove e) {
-        if (mc.player.getInventory().getStack(38).getItem() != Items.ELYTRA || !mc.player.isFallFlying())
-            return;
-
-        double[] dir = MovementUtility.forward(xzSpeed.getValue() * (accelerate.getValue().isEnabled() ? Math.min((acceleration += accelerateFactor.getValue()) / 100.0f, 1.0f) : 1f));
-        e.setX(dir[0]);
-        e.setY(mc.options.jumpKey.isPressed() ? upSpeed.getValue() : mc.options.sneakKey.isPressed() ? -sneakDownSpeed.getValue() : -0.08 * downFactor.getValue());
-        e.setZ(dir[1]);
-
-        if (!MovementUtility.isMoving())
-            acceleration = 0;
-
-        mc.player.setVelocity(e.getX(), e.getY(), e.getZ());
-        e.cancel();
+        // сбрасываем таймер после буста
+        boostCooldownTimer.reset();
     }
 
     public void matrixDisabler(int elytra) {
