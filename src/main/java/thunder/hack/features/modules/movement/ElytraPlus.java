@@ -298,58 +298,43 @@ public class ElytraPlus extends Module {
         }
     }
 
-    @EventHandler
-    public void onPacketSend(PacketEvent.SendPost event) {
+       @EventHandler
+    public void onPacketReceive(Receive e) {
         if (fullNullCheck()) return;
 
-        if (event.getPacket() instanceof ClientCommandC2SPacket command && mode.is(Mode.FireWork))
-            if (command.getMode() == ClientCommandC2SPacket.Mode.START_FALL_FLYING)
-                doFireWork(false);
-
-        if (event.getPacket() instanceof PlayerInteractEntityC2SPacket p && mode.is(Mode.FireWork) && grim.getValue().isEnabled() && fireWorkExtender.getValue())
-            if (flying && flightZonePos != null && Criticals.getEntity(p).age < (pingTimer.getPassedTimeMs() / 50f))
-                sendMessage(Formatting.RED + (isRu() ? "В этом режиме нельзя бить сущностей которые появились после включения модуля!" : "In this mode, you cannot hit entities that spawned after the module was turned on!"));
-    }
-
-    @EventHandler
-    public void onPacketReceive(PacketEvent.Receive e) {
-        if (e.getPacket() instanceof EntityTrackerUpdateS2CPacket pac && pac.id() == mc.player.getId() && (mode.is(Mode.Packet) || mode.is(Mode.SunriseOld))) {
-            List<DataTracker.SerializedEntry<?>> values = pac.trackedValues();
-            if (values.isEmpty())
-                return;
-
-            for (DataTracker.SerializedEntry<?> value : values)
-                if (value.value().toString().equals("FALL_FLYING") || (value.id() == 0 && (value.value().toString().equals("-120") || value.value().toString().equals("-128") || value.value().toString().equals("-126"))))
+        if (e.getPacket() instanceof PlayerPositionLookS2CPacket) {
+            PlayerPositionLookS2CPacket p = (PlayerPositionLookS2CPacket) e.getPacket();
+            if (this.isEnabled() && mode.getValue() == Mode.Boost) {
+                double dist = mc.player.getPos().distanceTo(new Vec3d(p.getX(), p.getY(), p.getZ()));
+                if (dist < 1.1) {
+                    mc.getNetworkHandler().sendPacket(new TeleportConfirmC2SPacket(p.getTeleportId()));
                     e.cancel();
-        }
-
-      if (e.getPacket() instanceof PlayerPositionLookS2CPacket) {
-         PlayerPositionLookS2CPacket p = (PlayerPositionLookS2CPacket) e.getPacket();
-         if (this.isEnabled() && mode.getValue() == Mode.Boost) {
-            double dist = mc.player.getPos().distanceTo(new Vec3d(p.getX(), p.getY(), p.getZ()));
-            // Если откат меньше 1.1 метра - подтверждаем серверу, но не дергаем камеру
-            if (dist < 1.1) {
-               mc.getNetworkHandler().sendPacket(new TeleportConfirmC2SPacket(p.getTeleportId()));
-               e.cancel();
-               return;
+                    return;
+                }
             }
-         }
-         acceleration = 0;
-         accelerationY = 0;
-         pingTimer.reset();
-      }
-
-            if (disableOnFlag.getValue() && mode.is(Mode.FireWork))
-                disable(isRu() ? "Выключен из-за флага!" : "Disabled due to flag!");
+            acceleration = 0;
+            accelerationY = 0;
+            pingTimer.reset();
         }
 
-        if (e.getPacket() instanceof CommonPingS2CPacket && mode.is(Mode.FireWork) && grim.getValue().isEnabled() && fireWorkExtender.getValue() && flying)
-            if (!pingTimer.passedMs(50000)) {
-                if (pingTimer.passedMs(1000) && PlayerUtility.getSquaredDistance2D(flightZonePos) < 7000)
-                    e.cancel();
-            } else pingTimer.reset();
-    }
+        if (e.getPacket() instanceof EntityStatusS2CPacket) {
+            EntityStatusS2CPacket pac = (EntityStatusS2CPacket) e.getPacket();
+            if (pac.getEntityId() == mc.player.getId() && (this.mode.is(Mode.Packet) || this.mode.is(Mode.SunriseOld))) {
+                e.cancel();
+            }
+        }
 
+        if (e.getPacket() instanceof CommonPingS2CPacket && mode.is(Mode.FireWork) && grim.getValue().isEnabled() && fireWorkExtender.getValue() && flying) {
+            if (!this.pingTimer.passedMs(50000L)) {
+                if (this.pingTimer.passedMs(1000L) && mc.player.getPos().distanceTo(this.flightZonePos) < 7000.0F) {
+                    e.cancel();
+                }
+            } else {
+                this.pingTimer.reset();
+            }
+        }
+    }
+    
     @EventHandler
     public void onPlayerUpdate(PlayerUpdateEvent e) {
         switch (mode.getValue()) {
@@ -529,13 +514,12 @@ public class ElytraPlus extends Module {
                 }
             }
         }
-
             if (twoBee.getValue()) {
                 if (mc.options.jumpKey.isPressed() || !onlySpace.getValue() || cruiseControl.getValue()) {
                     double tSpeed = (double) factor.getValue() / 10.0;
                     double[] m = MovementUtility.forwardWithoutStrafe(tSpeed);
                     
-                    // ПЛАВНОСТЬ ДЛЯ 1.21.1 (МАТЕМАТИКА)
+                    // ПЛАВНОСТЬ ДЛЯ 1.21.1 (ИНДЕКСЫ 0 И 1)
                     e.setX(e.getX() + (m[0] * 0.18));
                     e.setZ(e.getZ() + (m[1] * 0.18));
                 }
