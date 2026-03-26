@@ -505,16 +505,20 @@ public class ElytraPlus extends Module {
         return playerEntry.getLatency();
     }
 
-    private void doBoost(EventMove e) {
+        private void doBoost(EventMove e) {
         if (mc.player.getInventory().getStack(38).getItem() != Items.ELYTRA || !mc.player.isFallFlying() || mc.player.isTouchingWater() || mc.player.isInLava()) {
             return;
         }
 
         int currentPing = getCurrentPing();
         if (currentPing == 0) currentPing = 140;
-        
-        long minDelay = Math.min(300, Math.max(60, (long)(currentPing * 0.8)));
-        
+
+        // Умная задержка: если зажат пробел — бусты в 2 раза чаще
+        boolean isJumping = mc.options.jumpKey.isPressed();
+        float delayMultiplier = isJumping ? 0.4f : 0.8f;
+
+        long minDelay = Math.min(300, Math.max(60, (long)(currentPing * delayMultiplier)));
+
         if (!boostCooldownTimer.passedMs(minDelay)) {
             return;
         }
@@ -608,7 +612,7 @@ public class ElytraPlus extends Module {
         
         boostCooldownTimer.reset();
     }
-
+    
     private void doControl(EventMove e) {
         if (mc.player.getInventory().getStack(38).getItem() != Items.ELYTRA || !mc.player.isFallFlying()) {
             return;
