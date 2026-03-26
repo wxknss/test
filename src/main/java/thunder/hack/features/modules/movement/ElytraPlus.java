@@ -530,18 +530,17 @@ public class ElytraPlus extends Module {
             }
         }
 
-          if (twoBee.getValue()) {
-               if (mc.options.jumpKey.isPressed() || !onlySpace.getValue() || cruiseControl.getValue()) {
-                  double tSpeed = (double) factor.getValue() / 10.0;
-                  double[] m = MovementUtility.forwardWithoutStrafe(tSpeed);
-                  
-                  // ТА САМАЯ ПЛАВНОСТЬ (LERP)
-                  e.setX(MathUtility.lerp(e.getX(), e.getX() + m[0], 0.18));
-                  e.setZ(MathUtility.lerp(e.getZ(), e.getZ() + m[1], 0.18));
-                  moveForward = 1.0f;
-               }
-            }
-        } else {
+            if (twoBee.getValue()) {
+                if (mc.options.jumpKey.isPressed() || !onlySpace.getValue() || cruiseControl.getValue()) {
+                    double tSpeed = (double) factor.getValue() / 10.0;
+                    double[] m = MovementUtility.forwardWithoutStrafe(tSpeed);
+                    
+                    // ПЛАВНОСТЬ ДЛЯ 1.21.1 (МАТЕМАТИКА)
+                    e.setX(e.getX() + (m[0] * 0.18));
+                    e.setZ(e.getZ() + (m[1] * 0.18));
+                }
+                moveForward = 1.0f;
+            } else {
             Vec3d rotationVec = mc.player.getRotationVec(Render3DEngine.getTickDelta());
 
             double d6 = Math.hypot(rotationVec.x, rotationVec.z);
