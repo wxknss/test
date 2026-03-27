@@ -12,7 +12,7 @@ public class AutoBuy extends Module {
         super("AutoBuy", Category.MISC);
     }
 
-    private final Setting<Integer> delay = new Setting<>("Delay", 100, 30, 300);
+    private final Setting<Integer> delay = new Setting<>("Delay", 250, 50, 1000);
 
     // Слоты для кликов по порядку (с нуля)
     private final int[] slots = {4, 22, 21, 4, 29, 28, 21, 6, 22};
@@ -58,7 +58,7 @@ public class AutoBuy extends Module {
         
         int slot = slots[currentSlotIndex];
         clickSlot(screen, slot);
-        displayMessage("§eClicked slot: §7" + slot);
+        displayMessage("§e[" + (currentSlotIndex + 1) + "/" + slots.length + "] Clicked slot: §7" + (slot + 1));
         
         currentSlotIndex++;
         timer.reset();
