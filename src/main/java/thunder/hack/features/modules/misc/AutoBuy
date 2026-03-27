@@ -1,0 +1,255 @@
+package thunder.hack.features.modules.misc;
+
+import net.minecraft.client.gui.screen.ingame.GenericContainerScreen;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
+import net.minecraft.screen.slot.SlotActionType;
+import net.minecraft.text.Text;
+import thunder.hack.features.modules.Module;
+import thunder.hack.setting.Setting;
+import thunder.hack.utility.Timer;
+
+import java.util.HashMap;
+import java.util.Map;
+
+public class AutoBuy extends Module {
+    public AutoBuy() {
+        super("AutoBuy", Category.MISC);
+    }
+
+    // ===== НАСТРОЙКИ =====
+    private final Setting<Boolean> chainBoots = new Setting<>("Chain Boots", true);
+    private final Setting<Boolean> elytra = new Setting<>("Elytra", false);
+    private final Setting<Boolean> diamond = new Setting<>("Diamond", false);
+    private final Setting<Boolean> stonePick = new Setting<>("Stone Pickaxe", true);
+    private final Setting<Boolean> ironAxe = new Setting<>("Iron Axe", false);
+    private final Setting<Boolean> ironPick = new Setting<>("Iron Pickaxe", false);
+    private final Setting<Boolean> shears = new Setting<>("Shears", false);
+    private final Setting<Boolean> strengthPot = new Setting<>("Strength Potion", false);
+    private final Setting<Integer> delay = new Setting<>("Delay", 100, 30, 300);
+
+    // Слоты для предметов
+    private static final Map<String, Integer> ITEM_SLOTS = new HashMap<>();
+    static {
+        ITEM_SLOTS.put("elytra", 30);
+        ITEM_SLOTS.put("diamond", 29);
+        ITEM_SLOTS.put("ironAxe", 4);
+        ITEM_SLOTS.put("ironPick", 23);
+    }
+    
+    // Слоты для разделов (кликаем, но не проверяем)
+    private static final Map<String, Integer> SECTION_SLOTS = new HashMap<>();
+    static {
+        SECTION_SLOTS.put("chainBoots", 23);      // раздел обуви
+        SECTION_SLOTS.put("stonePick", 22);      // раздел инструментов
+        SECTION_SLOTS.put("strengthPot", 7);     // раздел зелий
+    }
+
+    private final Timer timer = new Timer();
+    private BuyState state = BuyState.IDLE;
+    private int itemsBought = 0;
+    private int targetItems = 0;
+    private String currentItem = "";
+    private int currentItemCount = 0;
+    private boolean inSection = false;
+
+    private enum BuyState {
+        IDLE, WAITING_FOR_SHOP, OPEN_SECTION, BUYING, VERIFYING, DONE
+    }
+
+    @Override
+    public void onEnable() {
+        reset();
+        state = BuyState.WAITING_FOR_SHOP;
+        targetItems = calculateTargetItems();
+        sendMessage("§aAutoBuy enabled. Target: §7" + targetItems + " §aitems");
+    }
+
+    @Override
+    public void onDisable() {
+        reset();
+        closeInventory();
+    }
+
+    @Override
+    public void onUpdate() {
+        if (fullNullCheck()) return;
+        
+        if (state == BuyState.DONE || state == BuyState.IDLE) {
+            if (state == BuyState.DONE) {
+                sendMessage("§aAutoBuy completed! Disabling...");
+                disable();
+            }
+            return;
+        }
+
+        if (state == BuyState.WAITING_FOR_SHOP) {
+            if (mc.currentScreen instanceof GenericContainerScreen screen) {
+                String title = screen.getTitle().getString().toLowerCase();
+                if (title.contains("shop") || title.contains("items") || title.contains("store")) {
+                    state = BuyState.OPEN_SECTION;
+                    timer.reset();
+                }
+            }
+            return;
+        }
+
+        if (!(mc.currentScreen instanceof GenericContainerScreen screen)) {
+            if (state != BuyState.WAITING_FOR_SHOP) {
+                sendMessage("§cShop closed! AutoBuy disabled.");
+                disable();
+            }
+            return;
+        }
+
+        if (!timer.passedMs(delay.getValue())) return;
+
+        switch (state) {
+            case OPEN_SECTION:
+                currentItem = getNextItem();
+                if (currentItem == null) {
+                    state = BuyState.DONE;
+                    return;
+                }
+                
+                // Если это раздел — открываем его
+                if (SECTION_SLOTS.containsKey(currentItem)) {
+                    int slot = SECTION_SLOTS.get(currentItem);
+                    clickSlot(screen, slot);
+                    inSection = true;
+                    sendMessage("§eOpening section: §7" + currentItem);
+                    state = BuyState.BUYING;
+                } else {
+                    inSection = false;
+                    state = BuyState.BUYING;
+                }
+                timer.reset();
+                break;
+
+            case BUYING:
+                // Если это предмет с конкретным слотом
+                if (ITEM_SLOTS.containsKey(currentItem)) {
+                    int slot = ITEM_SLOTS.get(currentItem);
+                    currentItemCount = countItemInInventory(currentItem);
+                    clickSlot(screen, slot);
+                    state = BuyState.VERIFYING;
+                } 
+                // Если это раздел — он уже открыт, просто переходим к следующему
+                else if (SECTION_SLOTS.containsKey(currentItem)) {
+                    // Раздел уже открыт, переходим к следующему предмету
+                    state = BuyState.OPEN_SECTION;
+                }
+                timer.reset();
+                break;
+
+            case VERIFYING:
+                int newCount = countItemInInventory(currentItem);
+                if (newCount > currentItemCount) {
+                    itemsBought++;
+                    sendMessage("§aBought: §7" + currentItem);
+                } else {
+                    sendMessage("§cFailed to buy: §7" + currentItem);
+                }
+                state = BuyState.OPEN_SECTION;
+                timer.reset();
+                break;
+        }
+    }
+
+    private String getNextItem() {
+        if (chainBoots.getValue() && !isItemBought("chainBoots")) return "chainBoots";
+        if (elytra.getValue() && !isItemBought("elytra")) return "elytra";
+        if (diamond.getValue() && !isItemBought("diamond")) return "diamond";
+        if (stonePick.getValue() && !isItemBought("stonePick")) return "stonePick";
+        if (ironAxe.getValue() && !isItemBought("ironAxe")) return "ironAxe";
+        if (ironPick.getValue() && !isItemBought("ironPick")) return "ironPick";
+        if (shears.getValue() && !isItemBought("shears")) return "shears";
+        if (strengthPot.getValue() && !isItemBought("strengthPot")) return "strengthPot";
+        return null;
+    }
+
+    private int countItemInInventory(String item) {
+        if (mc.player == null) return 0;
+        
+        int count = 0;
+        for (int i = 0; i < mc.player.getInventory().size(); i++) {
+            ItemStack stack = mc.player.getInventory().getStack(i);
+            if (matchesItem(stack, item)) {
+                count += stack.getCount();
+            }
+        }
+        return count;
+    }
+
+    private boolean matchesItem(ItemStack stack, String item) {
+        if (stack.isEmpty()) return false;
+        
+        switch (item) {
+            case "chainBoots":
+                return stack.getItem() == Items.CHAINMAIL_BOOTS;
+            case "elytra":
+                return stack.getItem() == Items.ELYTRA;
+            case "diamond":
+                return stack.getItem() == Items.DIAMOND;
+            case "stonePick":
+                return stack.getItem() == Items.STONE_PICKAXE;
+            case "ironAxe":
+                return stack.getItem() == Items.IRON_AXE;
+            case "ironPick":
+                return stack.getItem() == Items.IRON_PICKAXE;
+            case "shears":
+                return stack.getItem() == Items.SHEARS;
+            case "strengthPot":
+                return stack.getItem() == Items.POTION && 
+                       stack.getName().getString().toLowerCase().contains("strength");
+            default:
+                return false;
+        }
+    }
+
+    private boolean isItemBought(String item) {
+        return countItemInInventory(item) > 0;
+    }
+
+    private int calculateTargetItems() {
+        int count = 0;
+        if (chainBoots.getValue()) count++;
+        if (elytra.getValue()) count++;
+        if (diamond.getValue()) count++;
+        if (stonePick.getValue()) count++;
+        if (ironAxe.getValue()) count++;
+        if (ironPick.getValue()) count++;
+        if (shears.getValue()) count++;
+        if (strengthPot.getValue()) count++;
+        return count;
+    }
+
+    private void clickSlot(GenericContainerScreen screen, int slot) {
+        mc.interactionManager.clickSlot(
+            screen.getScreenHandler().syncId,
+            slot,
+            0,
+            SlotActionType.PICKUP,
+            mc.player
+        );
+    }
+
+    private void closeInventory() {
+        if (mc.player != null) {
+            mc.player.closeHandledScreen();
+        }
+    }
+
+    private void reset() {
+        itemsBought = 0;
+        currentItem = "";
+        currentItemCount = 0;
+        inSection = false;
+    }
+
+    private void sendMessage(String msg) {
+        if (mc.player != null) {
+            mc.player.sendMessage(Text.literal(msg), false);
+        }
+    }
+}
