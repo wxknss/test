@@ -1,6 +1,8 @@
 package thunder.hack.features.modules.player;
 
 import net.minecraft.client.gui.screen.ingame.GenericContainerScreen;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
 import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.text.Text;
 import thunder.hack.features.modules.Module;
@@ -56,6 +58,12 @@ public class AutoBuy extends Module {
             return;
         }
         
+        if (currentSlotIndex == 0 && isElytraSectionOpen(screen)) {
+            currentSlotIndex = 1;
+            timer.reset();
+            return;
+        }
+        
         if (currentSlotIndex >= slots.length) {
             disable();
             return;
@@ -75,6 +83,12 @@ public class AutoBuy extends Module {
         clickSlot(screen, slots[currentSlotIndex]);
         currentSlotIndex++;
         timer.reset();
+    }
+    
+    private boolean isElytraSectionOpen(GenericContainerScreen screen) {
+        ItemStack stack = screen.getScreenHandler().getSlot(12).getStack();
+        if (stack.isEmpty()) return false;
+        return stack.getItem() == Items.LIME_STAINED_GLASS_PANE;
     }
     
     private void clickSlot(GenericContainerScreen screen, int slot) {
