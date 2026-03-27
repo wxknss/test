@@ -516,11 +516,21 @@ public class ElytraPlus extends Module {
             return;
         }
         
-        // ===== ВЗЛЕТ С МЕСТА =====
+        // ===== ВЗЛЕТ С МЕСТА (ИСПРАВЛЕННЫЙ) =====
         if (mc.player.isOnGround() && mc.options.jumpKey.isPressed()) {
+            // 1. Прыжок
             mc.player.setVelocity(mc.player.getVelocity().x, 1.2, mc.player.getVelocity().z);
             mc.player.jump();
-            sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
+            
+            // 2. Задержка перед активацией элитры
+            new Thread(() -> {
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException ignored) {}
+                // Активируем элитру
+                sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
+            }).start();
+            
             boostCooldownTimer.reset();
             return;
         }
