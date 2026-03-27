@@ -9,7 +9,6 @@ import net.minecraft.text.Text;
 
 public class BotPacketListener implements ClientLoginPacketListener {
     private final BotConnection bot;
-    private ClientConnection connection;
 
     public BotPacketListener(BotConnection bot) {
         this.bot = bot;
@@ -17,27 +16,14 @@ public class BotPacketListener implements ClientLoginPacketListener {
 
     @Override
     public void onHello(LoginHelloS2CPacket packet) {}
-
     @Override
     public void onSuccess(LoginSuccessS2CPacket packet) {}
-
     @Override
-    public void onDisconnect(LoginDisconnectS2CPacket packet) {
-        bot.disconnect();
-    }
-
+    public void onDisconnect(LoginDisconnectS2CPacket packet) { bot.disconnect(); }
     @Override
-    public ClientConnection getConnection() {
-        return connection;
-    }
-
+    public ClientConnection getConnection() { return null; }
     @Override
-    public void onDisconnected(Text reason) {
-        bot.disconnect();
-    }
-
+    public void onDisconnected(Text reason) { bot.disconnect(); }
     @Override
-    public boolean isConnectionOpen() {
-        return bot.isConnected();
-    }
+    public boolean isConnectionOpen() { return bot.isConnected(); }
 }
