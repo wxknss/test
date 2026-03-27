@@ -11,27 +11,21 @@ public class BotCommand extends Command {
 
     @Override
     public void executeBuild(LiteralArgumentBuilder<CommandSource> builder) {
-        builder.then(literal("addbot").then(argument("nick", string()).executes(ctx -> {
+        builder.then(literal("add").then(argument("nick", word()).executes(ctx -> {
             String name = ctx.getArgument("nick", String.class);
-            if (BotManager.getInstance() != null) {
-                BotManager.getInstance().addBot(name);
-            }
+            if (BotManager.getInstance() != null) BotManager.getInstance().addBot(name);
             return 1;
         })));
 
-        builder.then(literal("removebot").then(argument("nick", string()).executes(ctx -> {
+        builder.then(literal("remove").then(argument("nick", word()).executes(ctx -> {
             String name = ctx.getArgument("nick", String.class);
-            if (BotManager.getInstance() != null) {
-                BotManager.getInstance().removeBot(name);
-            }
+            if (BotManager.getInstance() != null) BotManager.getInstance().removeBot(name);
             return 1;
         })));
 
         builder.then(literal("say").then(argument("message", greedyString()).executes(ctx -> {
-            String message = ctx.getArgument("message", String.class);
-            if (BotManager.getInstance() != null) {
-                BotManager.getInstance().sayAll(message);
-            }
+            String msg = ctx.getArgument("message", String.class);
+            if (BotManager.getInstance() != null) BotManager.getInstance().sayAll(msg);
             return 1;
         })));
     }
