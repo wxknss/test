@@ -22,6 +22,24 @@ public class NameProtect extends Module {
         Obfuscated   // Искаженный текст
     }
 
+    // ===== СТАРЫЕ ПОЛЯ ДЛЯ СОВМЕСТИМОСТИ =====
+    public static Setting<String> newName = new Setting<>("name", "Hell_Raider");
+    public static Setting<Boolean> hideFriendsStatic = new Setting<>("Hide friends", true);
+    
+    // Для совместимости со старым кодом
+    public static boolean hideFriends() {
+        return ModuleManager.nameProtect.isEnabled() && hideFriendsStatic.getValue();
+    }
+    
+    public static String getCustomName() {
+        if (!ModuleManager.nameProtect.isEnabled()) {
+            return mc.getGameProfile().getName();
+        }
+        return newName.getValue().replaceAll("&", "\u00a7");
+    }
+
+    // ===== НОВЫЕ МЕТОДЫ ДЛЯ 3 РЕЖИМОВ =====
+    
     // Получение имени для отображения
     public static String getFormattedName(PlayerEntity player) {
         if (!ModuleManager.nameProtect.isEnabled()) {
@@ -55,9 +73,9 @@ public class NameProtect extends Module {
 
         return player.getDisplayName().getString();
     }
-
-    // Для своего ника (совместимость)
-    public static String getCustomName() {
+    
+    // Получение собственного имени (для Default режима)
+    public static String getOwnName() {
         if (!ModuleManager.nameProtect.isEnabled()) {
             return mc.getGameProfile().getName();
         }
@@ -66,9 +84,5 @@ public class NameProtect extends Module {
             return np.customName.getValue().replace("&", "§");
         }
         return mc.getGameProfile().getName();
-    }
-
-    public static boolean hideFriends() {
-        return ModuleManager.nameProtect.isEnabled() && ModuleManager.nameProtect.hideFriends.getValue();
     }
 }
