@@ -9,7 +9,6 @@ import net.minecraft.block.entity.MobSpawnerBlockEntity;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.network.PlayerListEntry;
 import net.minecraft.client.render.DiffuseLighting;
-import net.minecraft.component.ComponentType;
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.component.type.ContainerComponent;
 import net.minecraft.component.type.ItemEnchantmentsComponent;
@@ -587,4 +586,52 @@ public class NameTags extends Module {
             if (focusedItem instanceof BlockItem bi && bi.getBlock() instanceof ShulkerBoxBlock) {
                 try {
                     Color c = new Color(Objects.requireNonNull(ShulkerBoxBlock.getColor(stack.getItem())).getEntityColor());
-                    colors = new float[]{c.getRed() / 255
+                    colors = new float[]{c.getRed() / 255f, c.getGreen() / 255f, c.getRed() / 255f, c.getAlpha() / 255f};
+                } catch (NullPointerException npe) {
+                    colors = new float[]{1F, 1F, 1F};
+                }
+            } else {
+                return false;
+            }
+            draw(context, compoundTag.stream().toList(), offsetX, offsetY, colors);
+        } catch (Exception ignore) {
+            return false;
+        }
+        return true;
+    }
+
+    private void draw(DrawContext context, List<ItemStack> itemStacks, int offsetX, int offsetY, float[] colors) {
+        RenderSystem.disableDepthTest();
+        GL11.glClear(GL11.GL_DEPTH_BUFFER_BIT);
+
+        offsetX += 8;
+        offsetY -= 82;
+
+        drawBackground(context, offsetX, offsetY, colors);
+
+        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+        DiffuseLighting.enableGuiDepthLighting();
+        int row = 0;
+        int i = 0;
+        for (ItemStack itemStack : itemStacks) {
+            context.drawItem(itemStack, offsetX + 8 + i * 18, offsetY + 7 + row * 18);
+            context.drawItemInSlot(mc.textRenderer, itemStack, offsetX + 8 + i * 18, offsetY + 7 + row * 18);
+            i++;
+            if (i >= 9) {
+                i = 0;
+                row++;
+            }
+        }
+        DiffuseLighting.disableGuiDepthLighting();
+        RenderSystem.enableDepthTest();
+    }
+
+    private void drawBackground(DrawContext context, int x, int y, float[] colors) {
+        RenderSystem.disableBlend();
+        RenderSystem.setShaderColor(colors[0], colors[1], colors[2], 1F);
+        RenderSystem.texParameter(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
+        RenderSystem.texParameter(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR_MIPMAP_LINEAR);
+        context.drawTexture(TextureStorage.container, x, y, 0, 0, 176, 67, 176, 67);
+        RenderSystem.enableBlend();
+    }
+}
