@@ -113,6 +113,11 @@ public class ElytraPlus extends Module {
     private final thunder.hack.utility.Timer boostCooldownTimer = new thunder.hack.utility.Timer();
     private boolean waitingForConfirm = false;
     private long lastBoostTime = 0;
+    
+    // НОВЫЕ ПЕРЕМЕННЫЕ ДЛЯ АВТОМАТИЧЕСКОГО ЦИКЛА
+    private int cycleState = 0;
+    private final thunder.hack.utility.Timer cycleTimer = new thunder.hack.utility.Timer();
+    private long cycleDuration = 200;
 
     private boolean infiniteFlag, hasTouchedGround, elytraEquiped, flying, started;
     private float acceleration, accelerationY, height, prevClientPitch, infinitePitch, lastInfinitePitch;
@@ -505,108 +510,120 @@ public class ElytraPlus extends Module {
         return playerEntry.getLatency();
     }
 
-        private void doBoost(EventMove e) {
-        if (mc.player.getInventory().getStack(38).getItem() != Items.ELYTRA || !mc.player.isFallFlying() || mc.player.isTouchingWater() || mc.player.isInLava()) {
+    private void doBoost(EventMove e) {
+        if (mc.player.getInventory().getStack(38).getItem() != Items.ELYTRA) {
             return;
         }
-
+        
+        // ===== ВЗЛЕТ С МЕСТА =====
+        if (mc.player.isOnGround() && mc.options.jumpKey.isPressed()) {
+            mc.player.setVelocity(mc.player.getVelocity().x, 1.2, mc.player.getVelocity().z);
+            mc.player.jump();
+            sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
+            // Сбрасываем состояние цикла
+            cycleState = 0;
+            cycleTimer.reset();
+            return;
+        }
+        
+        if (!mc.player.isFallFlying() || mc.player.isTouchingWater() || mc.player.isInLava()) {
+            return;
+        }
+        
+        // ===== АВТОМАТИЧЕСКИЙ ЦИКЛ: ВНИЗ → РЕЗКО ВВЕРХ =====
+        
         int currentPing = getCurrentPing();
         if (currentPing == 0) currentPing = 140;
-
-        // Умная задержка: если зажат пробел — бусты в 2 раза чаще
-        boolean isJumping = mc.options.jumpKey.isPressed();
-        float delayMultiplier = isJumping ? 0.4f : 0.8f;
-
-        long minDelay = Math.min(300, Math.max(60, (long)(currentPing * delayMultiplier)));
-
-        if (!boostCooldownTimer.passedMs(minDelay)) {
+        
+        // Управляем циклом по таймеру
+        // cycleState: 0 = смотрим вниз, 1 = падаем, 2 = резко вверх, 3 = пауза
+        if (cycleTimer.passedMs(cycleDuration)) {
+            cycleState = (cycleState + 1) % 4;
+            cycleTimer.reset();
+            
+            // Меняем угол обзора в зависимости от фазы
+            switch (cycleState) {
+                case 0: // Смотрим вниз
+                    mc.player.setPitch(25f);
+                    cycleDuration = 200; // 200 мс смотрим вниз
+                    break;
+                case 1: // Падаем вниз (усиливаем падение)
+                    mc.player.setPitch(30f);
+                    cycleDuration = 150; // 150 мс падаем
+                    break;
+                case 2: // Резко вверх
+                    mc.player.setPitch(-40f);
+                    cycleDuration = 100; // 100 мс взлетаем
+                    break;
+                case 3: // Пауза (ровный полет)
+                    mc.player.setPitch(0f);
+                    cycleDuration = 80; // 80 мс пауза
+                    break;
+            }
+        }
+        
+        // Динамическая задержка между бустами (стабильность)
+        long boostDelay;
+        switch (cycleState) {
+            case 0: // смотрим вниз — готовимся
+                boostDelay = Math.min(200, Math.max(40, (long)(currentPing * 0.6)));
+                break;
+            case 1: // падение — частые бусты для ускорения
+                boostDelay = Math.min(150, Math.max(30, (long)(currentPing * 0.4)));
+                break;
+            case 2: // взлет — средние бусты
+                boostDelay = Math.min(180, Math.max(50, (long)(currentPing * 0.5)));
+                break;
+            default: // пауза
+                boostDelay = Math.min(250, Math.max(80, (long)(currentPing * 0.8)));
+                break;
+        }
+        
+        if (!boostCooldownTimer.passedMs(boostDelay)) {
             return;
         }
-
+        
+        // ===== ПРИМЕНЯЕМ БУСТ =====
+        
         float moveForward = mc.player.input.movementForward;
-
-        if (cruiseControl.getValue()) {
-            if (mc.options.jumpKey.isPressed()) height++;
-            else if (mc.options.sneakKey.isPressed()) height--;
-            if (forceHeight.getValue()) height = manualHeight.getValue();
-
-            if(twoBee.getValue()) {
-                if (Managers.PLAYER.currentPlayerSpeed >= minUpSpeed.getValue())
-                    mc.player.setPitch((float) MathHelper.clamp(MathHelper.wrapDegrees(Math.toDegrees(Math.atan2((height - mc.player.getY()) * -1.0, 10))), -50, 50));
-                else
-                    mc.player.setPitch(0.25F);
-            } else {
-                double heightPct = 1 - Math.sqrt(MathHelper.clamp(Managers.PLAYER.currentPlayerSpeed / 1.7, 0.0, 1.0));
-                if (Managers.PLAYER.currentPlayerSpeed >= minUpSpeed.getValue() && startTimer.passedMs((long) (2000 * redeployInterval.getValue()))) {
-                    double pitch = -(44.4 * heightPct + 0.6);
-                    double diff = (height + 1 - mc.player.getY()) * 2;
-                    double pDist = -Math.toDegrees(Math.atan2(Math.abs(diff), Managers.PLAYER.currentPlayerSpeed * 30.0)) * Math.signum(diff);
-                    mc.player.setPitch((float) (pitch + (pDist - pitch) * MathHelper.clamp(Math.abs(diff), 0.0, 1.0)));
-                } else {
-                    mc.player.setPitch(0.25F);
-                    moveForward = 1;
-                }
-            }
+        
+        // Сила буста зависит от фазы
+        float boostPower;
+        switch (cycleState) {
+            case 1: // падение — слабый буст вниз
+                boostPower = factor.getValue() * 0.7f;
+                break;
+            case 2: // взлет — сильный буст вверх
+                boostPower = factor.getValue() * 1.3f;
+                break;
+            default:
+                boostPower = factor.getValue();
+                break;
         }
-
-        if(twoBee.getValue()) {
-            if ((mc.options.jumpKey.isPressed() || !onlySpace.getValue() || cruiseControl.getValue())) {
-                double[] m = MovementUtility.forwardWithoutStrafe((factor.getValue() / 10f));
-                e.setX(e.getX() + m[0]);
-                e.setZ(e.getZ() + m[1]);
-            }
-        } else {
-            Vec3d rotationVec = mc.player.getRotationVec(Render3DEngine.getTickDelta());
-
-            double d6 = Math.hypot(rotationVec.x, rotationVec.z);
-            double currentSpeed = Math.hypot(e.getX(), e.getZ());
-
-            float f4 = (float) (Math.pow(Math.cos(Math.toRadians(mc.player.getPitch())), 2) * Math.min(1, rotationVec.length() / 0.4));
-
-            e.setY(e.getY() + (-0.08D + (double) f4 * 0.06));
-
-            if (e.getY() < 0 && d6 > 0) {
-                double ySpeed = e.getY() * -0.1 * (double) f4;
-                e.setY(e.getY() + ySpeed);
-                e.setX(e.getX() + rotationVec.x * ySpeed / d6);
-                e.setZ(e.getZ() + rotationVec.z * ySpeed / d6);
-            }
-
-            if (mc.player.getPitch() < 0) {
-                double ySpeed = currentSpeed * -Math.sin(Math.toRadians(mc.player.getPitch())) * 0.04;
-                e.setY(e.getY() + ySpeed * 3.2);
-                e.setX(e.getX() - rotationVec.x * ySpeed / d6);
-                e.setZ(e.getZ() - rotationVec.z * ySpeed / d6);
-            }
-
-            if (d6 > 0) {
-                e.setX(e.getX() + (rotationVec.x / d6 * currentSpeed - e.getX()) * 0.1D);
-                e.setZ(e.getZ() + (rotationVec.z / d6 * currentSpeed - e.getZ()) * 0.1D);
-            }
-
-            if (mc.player.getPitch() > 0 && e.getY() < 0) {
-                if (moveForward != 0 && startTimer.passedMs((long) (2000 * redeployInterval.getValue())) && redeployTimer.passedMs((long) (1000 * redeployTimeOut.getValue()))) {
-                    if (stopMotion.getValue()) {
-                        e.setX(0);
-                        e.setZ(0);
-                    }
-                    startTimer.reset();
-                    sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
-                } else if (!startTimer.passedMs((long) (2000 * redeployInterval.getValue()))) {
-                    e.setX(e.getX() - moveForward * Math.sin(Math.toRadians(mc.player.getYaw())) * factor.getValue() / 20F);
-                    e.setZ(e.getZ() + moveForward * Math.cos(Math.toRadians(mc.player.getYaw())) * factor.getValue() / 20F);
-                    redeployTimer.reset();
-                }
-            }
+        
+        // Горизонтальный буст
+        if (twoBee.getValue()) {
+            double[] dir = MovementUtility.forwardWithoutStrafe(boostPower / 10f);
+            e.setX(e.getX() + dir[0]);
+            e.setZ(e.getZ() + dir[1]);
         }
-
+        
+        // Вертикальный буст
+        if (cycleState == 1) {
+            // Падение вниз
+            e.setY(e.getY() - 0.25 * boostPower);
+        } else if (cycleState == 2) {
+            // Резкий взлет вверх
+            e.setY(e.getY() + 0.45 * boostPower);
+        }
+        
+        // Ограничение скорости
         double speed = Math.hypot(e.getX(), e.getZ());
-
         if (speedLimit.getValue() && speed > maxSpeed.getValue()) {
             e.setX(e.getX() * maxSpeed.getValue() / speed);
             e.setZ(e.getZ() * maxSpeed.getValue() / speed);
         }
-
+        
         mc.player.setVelocity(e.getX(), e.getY(), e.getZ());
         e.cancel();
         
