@@ -15,14 +15,14 @@ public class AutoBuy extends Module {
     }
 
     // ===== НАСТРОЙКИ =====
-    private final Setting<Boolean> chainBoots = new Setting<>("Chain Boots", true);      // КНОПКА РАЗДЕЛА
+    private final Setting<Boolean> chainBoots = new Setting<>("Chain Boots", true);
     private final Setting<Boolean> elytra = new Setting<>("Elytra", false);
     private final Setting<Boolean> diamond = new Setting<>("Diamond", false);
-    private final Setting<Boolean> stonePick = new Setting<>("Stone Pickaxe", true);     // КНОПКА РАЗДЕЛА
+    private final Setting<Boolean> stonePick = new Setting<>("Stone Pickaxe", true);
     private final Setting<Boolean> ironAxe = new Setting<>("Iron Axe", false);
     private final Setting<Boolean> ironPick = new Setting<>("Iron Pickaxe", false);
     private final Setting<Boolean> shears = new Setting<>("Shears", false);
-    private final Setting<Boolean> strengthPot = new Setting<>("Strength Potion", false); // КНОПКА РАЗДЕЛА
+    private final Setting<Boolean> strengthPot = new Setting<>("Strength Potion", false);
     private final Setting<Integer> delay = new Setting<>("Delay", 100, 30, 300);
 
     private final Timer timer = new Timer();
@@ -30,6 +30,7 @@ public class AutoBuy extends Module {
     private String currentTarget = "";
     private int itemsBought = 0;
     private int targetCount = 0;
+    private java.util.HashSet<String> sectionsClicked = new java.util.HashSet<>();
 
     private enum BuyState {
         IDLE, WAITING_FOR_SHOP, BUYING, VERIFYING, DONE
@@ -40,7 +41,7 @@ public class AutoBuy extends Module {
         reset();
         state = BuyState.WAITING_FOR_SHOP;
         targetCount = calculateTargetCount();
-        sendMessage("§aAutoBuy enabled. Need to buy: §7" + targetCount + " §aitems");
+        displayMessage("§aAutoBuy enabled. Need to buy: §7" + targetCount + " §aitems");
     }
 
     @Override
@@ -55,7 +56,7 @@ public class AutoBuy extends Module {
         
         if (state == BuyState.DONE || state == BuyState.IDLE) {
             if (state == BuyState.DONE) {
-                sendMessage("§aAutoBuy completed! Disabling...");
+                displayMessage("§aAutoBuy completed! Disabling...");
                 disable();
             }
             return;
@@ -74,7 +75,7 @@ public class AutoBuy extends Module {
 
         if (!(mc.currentScreen instanceof GenericContainerScreen screen)) {
             if (state != BuyState.WAITING_FOR_SHOP) {
-                sendMessage("§cShop closed! AutoBuy disabled.");
+                displayMessage("§cShop closed! AutoBuy disabled.");
                 disable();
             }
             return;
@@ -90,21 +91,20 @@ public class AutoBuy extends Module {
                     return;
                 }
                 
-                sendMessage("§eBuying: §7" + currentTarget);
+                displayMessage("§eBuying: §7" + currentTarget);
                 
                 int slot = findItemSlot(screen, currentTarget);
                 if (slot != -1) {
                     clickSlot(screen, slot);
                     
-                    // Разделы (кнопки) не проверяем в инвентаре
                     if (isSectionButton(currentTarget)) {
-                        sendMessage("§aOpened section: §7" + currentTarget);
+                        displayMessage("§aOpened section: §7" + currentTarget);
                         state = BuyState.BUYING;
                     } else {
                         state = BuyState.VERIFYING;
                     }
                 } else {
-                    sendMessage("§cItem not found in shop: §7" + currentTarget);
+                    displayMessage("§cItem not found in shop: §7" + currentTarget);
                     state = BuyState.BUYING;
                 }
                 timer.reset();
@@ -113,9 +113,9 @@ public class AutoBuy extends Module {
             case VERIFYING:
                 if (isItemInInventory(currentTarget)) {
                     itemsBought++;
-                    sendMessage("§aBought: §7" + currentTarget);
+                    displayMessage("§aBought: §7" + currentTarget);
                 } else {
-                    sendMessage("§cFailed to buy: §7" + currentTarget);
+                    displayMessage("§cFailed to buy: §7" + currentTarget);
                 }
                 state = BuyState.BUYING;
                 timer.reset();
@@ -128,12 +128,10 @@ public class AutoBuy extends Module {
     }
 
     private String getNextTarget() {
-        // Кнопки разделов (кликаем, но не проверяем в инвентаре)
-        if (chainBoots.getValue() && !isSectionDone("chainBoots")) return "chainBoots";
-        if (stonePick.getValue() && !isSectionDone("stonePick")) return "stonePick";
-        if (strengthPot.getValue() && !isSectionDone("strengthPot")) return "strengthPot";
+        if (chainBoots.getValue() && !sectionsClicked.contains("chainBoots")) return "chainBoots";
+        if (stonePick.getValue() && !sectionsClicked.contains("stonePick")) return "stonePick";
+        if (strengthPot.getValue() && !sectionsClicked.contains("strengthPot")) return "strengthPot";
         
-        // Обычные предметы (проверяем в инвентаре)
         if (elytra.getValue() && !isItemInInventory("elytra")) return "elytra";
         if (diamond.getValue() && !isItemInInventory("diamond")) return "diamond";
         if (ironAxe.getValue() && !isItemInInventory("ironAxe")) return "ironAxe";
@@ -141,13 +139,6 @@ public class AutoBuy extends Module {
         if (shears.getValue() && !isItemInInventory("shears")) return "shears";
         return null;
     }
-
-    private boolean isSectionDone(String section) {
-        // Разделы считаются "сделанными" если мы их уже кликнули
-        return sectionsClicked.contains(section);
-    }
-
-    private java.util.HashSet<String> sectionsClicked = new java.util.HashSet<>();
 
     private boolean isItemInInventory(String item) {
         if (mc.player == null) return false;
@@ -236,7 +227,6 @@ public class AutoBuy extends Module {
             mc.player
         );
         
-        // Если это кнопка раздела — запоминаем
         if (isSectionButton(currentTarget)) {
             sectionsClicked.add(currentTarget);
         }
@@ -254,7 +244,7 @@ public class AutoBuy extends Module {
         sectionsClicked.clear();
     }
 
-    private void sendMessage(String msg) {
+    private void displayMessage(String msg) {
         if (mc.player != null) {
             mc.player.sendMessage(Text.literal(msg), false);
         }
