@@ -516,68 +516,67 @@ public class ElytraPlus extends Module {
             return;
         }
         
-        // ===== ВЗЛЕТ С МЕСТА (комбинированный) =====
+        // ===== ВЗЛЕТ С МЕСТА =====
         if (mc.player.isOnGround() && mc.options.jumpKey.isPressed()) {
-            // 1. Сильный прыжок
-            mc.player.setVelocity(mc.player.getVelocity().x, 1.5, mc.player.getVelocity().z);
+            mc.player.setVelocity(mc.player.getVelocity().x, 1.2, mc.player.getVelocity().z);
             mc.player.jump();
-            
-            // 2. Активируем элитру
             sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
-            
-            // 3. МОЩНЫЙ ИМПУЛЬС ВВЕРХ (взлетаем как ракета)
-            // Сначала ждем 50 мс, чтобы элитра активировалась
-            new Thread(() -> {
-                try {
-                    Thread.sleep(50);
-                } catch (InterruptedException ignored) {}
-                // Отправляем дополнительный импульс вверх
-                mc.player.setVelocity(mc.player.getVelocity().x, 2.2, mc.player.getVelocity().z);
-                // Отправляем пакет для синхронизации
-                sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
-            }).start();
-            
-            // Сбрасываем таймер
             boostCooldownTimer.reset();
             return;
         }
         
-        // Если не летим или в воде/лаве — выходим
+        // Если не летим — выходим
         if (!mc.player.isFallFlying() || mc.player.isTouchingWater() || mc.player.isInLava()) {
             return;
         }
         
-        // ===== ПОЛЕТ =====
+        // ===== ОРИГИНАЛЬНЫЙ БУСТ =====
         
         int currentPing = getCurrentPing();
         if (currentPing == 0) currentPing = 140;
         
-        // Задержка между бустами (безопасная)
-        long minDelay = Math.min(400, Math.max(100, (long)(currentPing * 1.2)));
+        // Задержка как в оригинале (0.8 * пинг)
+        long minDelay = Math.min(300, Math.max(60, (long)(currentPing * 0.8)));
         
         if (!boostCooldownTimer.passedMs(minDelay)) {
             return;
         }
         
-        // ===== ПРИМЕНЯЕМ БУСТ =====
+        // ===== ОРИГИНАЛЬНАЯ МЕХАНИКА БУСТА =====
         
-        // Горизонтальный буст
         if (twoBee.getValue()) {
-            double[] dir = MovementUtility.forwardWithoutStrafe(factor.getValue() / 12f);
-            e.setX(e.getX() + dir[0]);
-            e.setZ(e.getZ() + dir[1]);
-        }
-        
-        // Вертикальный контроль (для поддержания высоты)
-        if (mc.options.jumpKey.isPressed()) {
-            // Набор высоты
-            e.setY(e.getY() + 0.15);
-        } else if (mc.options.sneakKey.isPressed()) {
-            // Спуск
-            e.setY(e.getY() - 0.1);
+            // Оригинальный буст из ThunderHack
+            if ((mc.options.jumpKey.isPressed() || !onlySpace.getValue() || cruiseControl.getValue())) {
+                double[] m = MovementUtility.forwardWithoutStrafe((factor.getValue() / 10f));
+                e.setX(e.getX() + m[0]);
+                e.setZ(e.getZ() + m[1]);
+            }
         } else {
-            // Ровный полет (минимальное падение)
-            e.setY(e.getY() - 0.02);
+            // Альтернативная механика (если 2b2t выключен)
+            Vec3d rotationVec = mc.player.getRotationVec(Render3DEngine.getTickDelta());
+            double d6 = Math.hypot(rotationVec.x, rotationVec.z);
+            double currentSpeed = Math.hypot(e.getX(), e.getZ());
+            float f4 = (float) (Math.pow(Math.cos(Math.toRadians(mc.player.getPitch())), 2) * Math.min(1, rotationVec.length() / 0.4));
+            e.setY(e.getY() + (-0.08D + (double) f4 * 0.06));
+            
+            if (e.getY() < 0 && d6 > 0) {
+                double ySpeed = e.getY() * -0.1 * (double) f4;
+                e.setY(e.getY() + ySpeed);
+                e.setX(e.getX() + rotationVec.x * ySpeed / d6);
+                e.setZ(e.getZ() + rotationVec.z * ySpeed / d6);
+            }
+            
+            if (mc.player.getPitch() < 0) {
+                double ySpeed = currentSpeed * -Math.sin(Math.toRadians(mc.player.getPitch())) * 0.04;
+                e.setY(e.getY() + ySpeed * 3.2);
+                e.setX(e.getX() - rotationVec.x * ySpeed / d6);
+                e.setZ(e.getZ() - rotationVec.z * ySpeed / d6);
+            }
+            
+            if (d6 > 0) {
+                e.setX(e.getX() + (rotationVec.x / d6 * currentSpeed - e.getX()) * 0.1D);
+                e.setZ(e.getZ() + (rotationVec.z / d6 * currentSpeed - e.getZ()) * 0.1D);
+            }
         }
         
         // Ограничение скорости
@@ -587,7 +586,6 @@ public class ElytraPlus extends Module {
             e.setZ(e.getZ() * maxSpeed.getValue() / speed);
         }
         
-        // Применяем движение
         mc.player.setVelocity(e.getX(), e.getY(), e.getZ());
         e.cancel();
         
