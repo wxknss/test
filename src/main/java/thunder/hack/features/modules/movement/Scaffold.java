@@ -29,16 +29,22 @@ import static thunder.hack.utility.player.InteractionUtility.checkNearBlocks;
 
 public class Scaffold extends Module {
     private final Setting<Mode> mode = new Setting<>("Mode", Mode.NCP);
-    private final Setting<InteractionUtility.PlaceMode> placeMode = new Setting<>("PlaceMode", InteractionUtility.PlaceMode.Normal, v -> !mode.is(Mode.Grim));
+    private final Setting<InteractionUtility.PlaceMode> placeMode = new Setting<>("PlaceMode", InteractionUtility.PlaceMode.Normal, v -> !mode.is(Mode.Grim) && !mode.is(Mode.Sofia));
     private final Setting<Switch> autoSwitch = new Setting<>("Switch", Switch.Silent);
     private final Setting<Boolean> rotate = new Setting<>("Rotate", true);
     private final Setting<Boolean> lockY = new Setting<>("LockY", false);
     private final Setting<Boolean> onlyNotHoldingSpace = new Setting<>("OnlyNotHoldingSpace", false, v -> lockY.getValue());
     private final Setting<Boolean> autoJump = new Setting<>("AutoJump", false);
     private final Setting<Boolean> allowShift = new Setting<>("WorkWhileSneaking", false);
-    private final Setting<Boolean> tower = new Setting<>("Tower", true, v -> !mode.is(Mode.Grim));
-    private final Setting<Boolean> safewalk = new Setting<>("SafeWalk", true, v -> !mode.is(Mode.Grim));
+    private final Setting<Boolean> tower = new Setting<>("Tower", true, v -> !mode.is(Mode.Grim) && !mode.is(Mode.Sofia));
+    private final Setting<Boolean> safewalk = new Setting<>("SafeWalk", true, v -> !mode.is(Mode.Grim) && !mode.is(Mode.Sofia));
     private final Setting<Boolean> echestholding = new Setting<>("EchestHolding", false);
+    
+    // ===== НОВЫЕ НАСТРОЙКИ ДЛЯ РЕЖИМА SOFIA =====
+    private final Setting<Float> sofiaWalkSpeed = new Setting<>("SofiaWalkSpeed", 0.98f, 0.5f, 1.0f, v -> mode.is(Mode.Sofia));
+    private final Setting<Float> sofiaStrafeAmount = new Setting<>("SofiaStrafe", 0.03f, 0.01f, 0.1f, v -> mode.is(Mode.Sofia));
+    private final Setting<Boolean> sofiaAutoLockY = new Setting<>("SofiaAutoLockY", true, v -> mode.is(Mode.Sofia));
+    
     private final Setting<SettingGroup> renderCategory = new Setting<>("Render", new SettingGroup(false, 0));
     private final Setting<Boolean> render = new Setting<>("Render", true).addToGroup(renderCategory);
     private final Setting<BlockAnimationUtility.BlockRenderMode> renderMode = new Setting<>("RenderMode", BlockAnimationUtility.BlockRenderMode.All).addToGroup(renderCategory);
@@ -48,7 +54,7 @@ public class Scaffold extends Module {
     private final Setting<Integer> renderLineWidth = new Setting<>("RenderLineWidth", 2, 1, 5).addToGroup(renderCategory);
 
     private enum Mode {
-        NCP, StrictNCP, Grim
+        NCP, StrictNCP, Grim, Sofia
     }
 
     private enum Switch {
@@ -58,6 +64,13 @@ public class Scaffold extends Module {
     private final Timer timer = new Timer();
     private BlockPosWithFacing currentblock;
     private int prevY;
+    
+    // ===== ПЕРЕМЕННЫЕ ДЛЯ SOFIA =====
+    private float sofiaStrafeTimer = 0;
+    private float sofiaStrafeDirection = 1;
+    private int sofiaRotationTick = 0;
+    private float sofiaTargetYaw = 0;
+    private float sofiaTargetPitch = 0;
 
     public Scaffold() {
         super("Scaffold", Category.MOVEMENT);
@@ -66,11 +79,47 @@ public class Scaffold extends Module {
     @Override
     public void onEnable() {
         prevY = -999;
+        sofiaStrafeTimer = 0;
+        sofiaStrafeDirection = 1;
+        sofiaRotationTick = 0;
     }
 
     @EventHandler
     public void onMove(EventMove event) {
         if (fullNullCheck()) return;
+        
+        // ===== SOFIA РЕЖИМ: легитное движение =====
+        if (mode.is(Mode.Sofia)) {
+            double x = event.getX();
+            double z = event.getZ();
+            
+            // Плавное замедление для имитации ансофта
+            if (MovementUtility.isMoving()) {
+                x *= sofiaWalkSpeed.getValue();
+                z *= sofiaWalkSpeed.getValue();
+            }
+            
+            // Легкое "шатание" в стороны (имитация мыши)
+            if (MovementUtility.isMoving() && mc.player.isOnGround()) {
+                sofiaStrafeTimer += 0.02f;
+                if (sofiaStrafeTimer > 1.0f) {
+                    sofiaStrafeDirection *= -1;
+                    sofiaStrafeTimer = 0;
+                }
+                
+                float strafe = sofiaStrafeAmount.getValue() * sofiaStrafeDirection;
+                double angle = Math.toRadians(mc.player.getYaw() + 90);
+                x += Math.cos(angle) * strafe;
+                z += Math.sin(angle) * strafe;
+            }
+            
+            event.setX(x);
+            event.setZ(z);
+            event.cancel();
+            return;
+        }
+        
+        // ===== ОРИГИНАЛЬНЫЙ SAFEWALK =====
         if (safewalk.getValue() && !mode.is(Mode.Grim)) {
             double x = event.getX();
             double y = event.getY();
@@ -122,7 +171,7 @@ public class Scaffold extends Module {
 
     @EventHandler
     public void onTick(EventTick e) {
-        if (mode.is(Mode.Grim)) {
+        if (mode.is(Mode.Grim) || mode.is(Mode.Sofia)) {
             preAction();
             postAction();
         }
@@ -130,7 +179,7 @@ public class Scaffold extends Module {
 
     @EventHandler
     public void onPre(EventSync e) {
-        if (!mode.is(Mode.Grim))
+        if (!mode.is(Mode.Grim) && !mode.is(Mode.Sofia))
             preAction();
     }
 
@@ -152,17 +201,46 @@ public class Scaffold extends Module {
                 mc.player.jump();
         }
 
-        BlockPos blockPos2 = lockY.getValue() && prevY != -999 ?
-                BlockPos.ofFloored(mc.player.getX(), prevY, mc.player.getZ())
-                : new BlockPos((int) Math.floor(mc.player.getX()), (int) (Math.floor(mc.player.getY() - 1)), (int) Math.floor(mc.player.getZ()));
+        BlockPos blockPos2;
+        
+        // ===== SOFIA LOCK Y =====
+        if (mode.is(Mode.Sofia) && sofiaAutoLockY.getValue() && prevY != -999) {
+            blockPos2 = BlockPos.ofFloored(mc.player.getX(), prevY, mc.player.getZ());
+        } else if (lockY.getValue() && prevY != -999) {
+            blockPos2 = BlockPos.ofFloored(mc.player.getX(), prevY, mc.player.getZ());
+        } else {
+            blockPos2 = new BlockPos((int) Math.floor(mc.player.getX()), (int) (Math.floor(mc.player.getY() - 1)), (int) Math.floor(mc.player.getZ()));
+        }
 
         if (!mc.world.getBlockState(blockPos2).isReplaceable()) return;
 
         currentblock = checkNearBlocksExtended(blockPos2);
-        if (currentblock != null) {
-            if (rotate.getValue() && !mode.is(Mode.Grim)) {
-                Vec3d hitVec = new Vec3d(currentblock.position().getX() + 0.5, currentblock.position().getY() + 0.5, currentblock.position().getZ() + 0.5).add(new Vec3d(currentblock.facing().getUnitVector()).multiply(0.5));
-                float[] rotations = InteractionUtility.calculateAngle(hitVec);
+        
+        // ===== SOFIA РОТАЦИИ (с имитацией движения мыши) =====
+        if (currentblock != null && rotate.getValue()) {
+            Vec3d hitVec = new Vec3d(currentblock.position().getX() + 0.5, currentblock.position().getY() + 0.5, currentblock.position().getZ() + 0.5).add(new Vec3d(currentblock.facing().getUnitVector()).multiply(0.5));
+            float[] rotations = InteractionUtility.calculateAngle(hitVec);
+            
+            if (mode.is(Mode.Sofia)) {
+                // Плавная интерполяция ротаций (имитация "легкого движения мышкой")
+                sofiaRotationTick++;
+                float smoothFactor = 0.3f + (float) Math.sin(sofiaRotationTick * 0.1f) * 0.05f;
+                
+                if (sofiaTargetYaw == 0) sofiaTargetYaw = rotations[0];
+                if (sofiaTargetPitch == 0) sofiaTargetPitch = rotations[1];
+                
+                sofiaTargetYaw = rotations[0];
+                sofiaTargetPitch = rotations[1];
+                
+                float currentYaw = mc.player.getYaw();
+                float currentPitch = mc.player.getPitch();
+                
+                float newYaw = currentYaw + (sofiaTargetYaw - currentYaw) * smoothFactor;
+                float newPitch = currentPitch + (sofiaTargetPitch - currentPitch) * smoothFactor;
+                
+                mc.player.setYaw(newYaw);
+                mc.player.setPitch(newPitch);
+            } else {
                 mc.player.setYaw(rotations[0]);
                 mc.player.setPitch(rotations[1]);
             }
@@ -171,12 +249,12 @@ public class Scaffold extends Module {
 
     @EventHandler
     public void onPost(EventPostSync e) {
-        if (!mode.is(Mode.Grim))
+        if (!mode.is(Mode.Grim) && !mode.is(Mode.Sofia))
             postAction();
     }
 
     public void postAction() {
-        float offset = mode.is(Mode.Grim) ? 0.3f : 0.2f;
+        float offset = mode.is(Mode.Grim) || mode.is(Mode.Sofia) ? 0.3f : 0.2f;
 
         if (mc.world.getBlockCollisions(mc.player, mc.player.getBoundingBox().expand(-offset, 0, -offset).offset(0, -0.5, 0)).iterator().hasNext())
             return;
@@ -186,7 +264,7 @@ public class Scaffold extends Module {
         int prevItem = prePlace(true);
 
         if (prevItem != -1) {
-            if (mc.player.input.jumping && !MovementUtility.isMoving() && tower.getValue() && !mode.is(Mode.Grim)) {
+            if (mc.player.input.jumping && !MovementUtility.isMoving() && tower.getValue() && !mode.is(Mode.Grim) && !mode.is(Mode.Sofia)) {
                 mc.player.setVelocity(0.0, 0.42, 0.0);
                 if (timer.passedMs(1500)) {
                     mc.player.setVelocity(mc.player.getVelocity().x, -0.28, mc.player.getVelocity().z);
@@ -196,10 +274,12 @@ public class Scaffold extends Module {
 
             BlockHitResult bhr;
 
-            if (mode.is(Mode.StrictNCP))
+            // ===== SOFIA: точная установка блока =====
+            if (mode.is(Mode.StrictNCP) || mode.is(Mode.Sofia)) {
                 bhr = new BlockHitResult(new Vec3d(currentblock.position().getX() + 0.5, currentblock.position().getY() + 0.5, currentblock.position().getZ() + 0.5).add(new Vec3d(currentblock.facing().getUnitVector()).multiply(0.5)), currentblock.facing(), currentblock.position(), false);
-            else
+            } else {
                 bhr = new BlockHitResult(new Vec3d((double) currentblock.position().getX() + Math.random(), currentblock.position().getY() + 0.99f, (double) currentblock.position().getZ() + Math.random()), currentblock.facing(), currentblock.position(), false);
+            }
 
             float[] rotations = InteractionUtility.calculateAngle(bhr.getPos());
 
@@ -208,14 +288,15 @@ public class Scaffold extends Module {
             if (sneak)
                 mc.player.networkHandler.sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.PRESS_SHIFT_KEY));
 
-            if (mode.is(Mode.Grim))
+            if (mode.is(Mode.Grim) || mode.is(Mode.Sofia))
                 sendPacket(new PlayerMoveC2SPacket.Full(mc.player.getX(), mc.player.getY(), mc.player.getZ(), rotations[0], rotations[1], mc.player.isOnGround()));
 
-            if (placeMode.getValue() == InteractionUtility.PlaceMode.Packet && !mode.is(Mode.Grim)) {
+            if (placeMode.getValue() == InteractionUtility.PlaceMode.Packet && !mode.is(Mode.Grim) && !mode.is(Mode.Sofia)) {
                 boolean finalIsOffhand = prevItem == -2;
                 sendSequencedPacket(id -> new PlayerInteractBlockC2SPacket(finalIsOffhand ? Hand.OFF_HAND : Hand.MAIN_HAND, bhr, id));
-            } else
+            } else {
                 mc.interactionManager.interactBlock(mc.player, prevItem == -2 ? Hand.OFF_HAND : Hand.MAIN_HAND, bhr);
+            }
 
             mc.player.networkHandler.sendPacket(new HandSwingC2SPacket(prevItem == -2 ? Hand.OFF_HAND : Hand.MAIN_HAND));
 
@@ -224,7 +305,7 @@ public class Scaffold extends Module {
             if (sneak)
                 mc.player.networkHandler.sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.RELEASE_SHIFT_KEY));
 
-            if (mode.is(Mode.Grim))
+            if (mode.is(Mode.Grim) || mode.is(Mode.Sofia))
                 sendPacket(new PlayerMoveC2SPacket.Full(mc.player.getX(), mc.player.getY(), mc.player.getZ(), mc.player.getYaw(), mc.player.getPitch(), mc.player.isOnGround()));
 
             if (render.getValue())
