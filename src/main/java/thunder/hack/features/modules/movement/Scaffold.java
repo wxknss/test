@@ -18,6 +18,7 @@ import thunder.hack.setting.Setting;
 import thunder.hack.setting.impl.ColorSetting;
 import thunder.hack.setting.impl.SettingGroup;
 import thunder.hack.utility.Timer;
+import thunder.hack.utility.player.InteractionUtility;
 import thunder.hack.utility.player.InventoryUtility;
 import thunder.hack.utility.player.MovementUtility;
 import thunder.hack.utility.player.SearchInvResult;
@@ -31,14 +32,11 @@ public class Scaffold extends Module {
         super("Scaffold", Category.MOVEMENT);
     }
 
-    // ===== ОСНОВНЫЕ НАСТРОЙКИ =====
     private final Setting<Mode> mode = new Setting<>("Mode", Mode.NCP);
     private final Setting<PlaceMode> placeMode = new Setting<>("PlaceMode", PlaceMode.Normal);
     private final Setting<SwitchMode> autoSwitch = new Setting<>("Switch", SwitchMode.Silent);
     private final Setting<Boolean> rotate = new Setting<>("Rotate", true);
     private final Setting<Boolean> moveFix = new Setting<>("MoveFix", true);
-    
-    // ===== РАСШИРЕННЫЕ НАСТРОЙКИ =====
     private final Setting<Integer> cps = new Setting<>("CPS", 12, 1, 20);
     private final Setting<Integer> placeDelay = new Setting<>("PlaceDelay", 0, 0, 500);
     private final Setting<Boolean> expand = new Setting<>("Expand", false);
@@ -55,7 +53,6 @@ public class Scaffold extends Module {
     private final Setting<Boolean> allowShift = new Setting<>("WorkWhileSneaking", false);
     private final Setting<Boolean> echestHolding = new Setting<>("EchestHolding", false);
     
-    // ===== РЕНДЕР =====
     private final Setting<SettingGroup> renderCategory = new Setting<>("Render", new SettingGroup(false, 0));
     private final Setting<Boolean> render = new Setting<>("Render", true).addToGroup(renderCategory);
     private final Setting<BlockAnimationUtility.BlockRenderMode> renderMode = new Setting<>("RenderMode", BlockAnimationUtility.BlockRenderMode.All).addToGroup(renderCategory);
@@ -84,7 +81,6 @@ public class Scaffold extends Module {
     public void onMove(EventMove e) {
         if (fullNullCheck()) return;
 
-        // SafeWalk + MoveFix
         if (safewalk.getValue() && !mode.is(Mode.Grim)) {
             double x = e.getX();
             double y = e.getY();
@@ -122,7 +118,6 @@ public class Scaffold extends Module {
         if (mc.player.isSneaking() && !allowShift.getValue()) return;
         if (onlySpace.getValue() && !mc.options.jumpKey.isPressed()) return;
 
-        // AutoJump
         if (autoJump.getValue() && MovementUtility.isMoving() && mc.player.isOnGround()) {
             if (autoJumpOnEdge.getValue() && isOnEdge()) {
                 mc.player.jump();
@@ -131,10 +126,8 @@ public class Scaffold extends Module {
             }
         }
 
-        // Поиск блока
         findBlock();
         
-        // Постановка блока
         if (currentBlock != null && placeTimer.passedMs(placeDelay.getValue())) {
             if (placeTimer.passedMs(1000 / cps.getValue())) {
                 placeBlock();
@@ -142,7 +135,6 @@ public class Scaffold extends Module {
             }
         }
 
-        // Tower
         if (tower.getValue() && mc.options.jumpKey.isPressed() && !MovementUtility.isMoving() && mc.player.isOnGround()) {
             mc.player.setVelocity(0, towerSpeed.getValue(), 0);
             if (!hasJumped) {
@@ -153,7 +145,6 @@ public class Scaffold extends Module {
             hasJumped = false;
         }
 
-        // Lock Y
         if (lockY.getValue() && prevY != -999) {
             double targetY = prevY + lockYHeight.getValue();
             if (mc.player.getY() < targetY) {
