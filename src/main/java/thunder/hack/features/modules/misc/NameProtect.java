@@ -10,18 +10,13 @@ public class NameProtect extends Module {
     }
 
     private final Setting<Mode> mode = new Setting<>("Mode", Mode.Default);
-    
     private final Setting<String> ownName = new Setting<>("OwnName", "Hell_Raider", v -> mode.is(Mode.Default) || mode.is(Mode.Obfuscated));
-    
     private final Setting<String> targetName = new Setting<>("TargetName", "player123", v -> mode.is(Mode.Anal));
     private final Setting<String> fakeName = new Setting<>("FakeName", "&cFakeNick", v -> mode.is(Mode.Anal));
-    
     private final Setting<Boolean> hideFriends = new Setting<>("HideFriends", true);
 
     public enum Mode {
-        Default,   
-        Anal,      
-        Obfuscated 
+        Default, Anal, Obfuscated
     }
 
     public static Setting<String> newName = new Setting<>("name", "Hell_Raider");
