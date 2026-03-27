@@ -21,11 +21,14 @@ public class AutoBuy extends Module {
     private final Timer timer = new Timer();
     private int currentSlotIndex = 0;
     private boolean running = false;
+    private boolean waitingForShop = true;
 
     @Override
     public void onEnable() {
         currentSlotIndex = 0;
         running = true;
+        waitingForShop = true;
+        timer.reset();
         displayMessage("§aAutoBuy started");
     }
 
@@ -33,6 +36,7 @@ public class AutoBuy extends Module {
     public void onDisable() {
         running = false;
         currentSlotIndex = 0;
+        waitingForShop = true;
         closeInventory();
         displayMessage("§cAutoBuy stopped");
     }
@@ -53,6 +57,16 @@ public class AutoBuy extends Module {
             displayMessage("§aAll slots clicked! AutoBuy disabled.");
             disable();
             return;
+        }
+        
+        // Ждем задержку после открытия шопа перед первым кликом
+        if (waitingForShop) {
+            if (timer.passedMs(delay.getValue())) {
+                waitingForShop = false;
+                timer.reset();
+            } else {
+                return;
+            }
         }
         
         if (!timer.passedMs(delay.getValue())) return;
