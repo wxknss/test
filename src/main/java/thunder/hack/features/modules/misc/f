@@ -13,11 +13,10 @@ public class AutoBuy extends Module {
     }
 
     private final Setting<Integer> delay = new Setting<>("Delay", 250, 50, 1000);
+    private final Setting<Boolean> requireExp = new Setting<>("RequireExp", true);
+    private final Setting<Integer> minExp = new Setting<>("MinExp", 3000, 0, 10000, v -> requireExp.getValue());
 
-    // Слоты для кликов по порядку (с 0)
-    // Твои номера (с 1): 4, 23, 22, 5, 30, 29, 22, 7, 23
     private final int[] slots = {3, 22, 21, 4, 29, 28, 21, 6, 22};
-    
     private final Timer timer = new Timer();
     private int currentSlotIndex = 0;
     private boolean running = false;
@@ -25,6 +24,12 @@ public class AutoBuy extends Module {
 
     @Override
     public void onEnable() {
+        if (requireExp.getValue() && mc.player != null && mc.player.experienceLevel < minExp.getValue()) {
+            displayMessage("§cNot enough exp! Need §7" + minExp.getValue() + " §clevels");
+            disable();
+            return;
+        }
+        
         currentSlotIndex = 0;
         running = true;
         waitingForShop = true;
@@ -38,7 +43,6 @@ public class AutoBuy extends Module {
         currentSlotIndex = 0;
         waitingForShop = true;
         closeInventory();
-        displayMessage("§cAutoBuy stopped");
     }
 
     @Override
@@ -47,19 +51,16 @@ public class AutoBuy extends Module {
         
         if (!(mc.currentScreen instanceof GenericContainerScreen screen)) {
             if (currentSlotIndex > 0) {
-                displayMessage("§cShop closed! AutoBuy disabled.");
                 disable();
             }
             return;
         }
         
         if (currentSlotIndex >= slots.length) {
-            displayMessage("§aAll slots clicked! AutoBuy disabled.");
             disable();
             return;
         }
         
-        // Ждем задержку после открытия шопа перед первым кликом
         if (waitingForShop) {
             if (timer.passedMs(delay.getValue())) {
                 waitingForShop = false;
@@ -71,10 +72,7 @@ public class AutoBuy extends Module {
         
         if (!timer.passedMs(delay.getValue())) return;
         
-        int slot = slots[currentSlotIndex];
-        clickSlot(screen, slot);
-        displayMessage("§e[" + (currentSlotIndex + 1) + "/" + slots.length + "] Clicked slot: §7" + (slot + 1));
-        
+        clickSlot(screen, slots[currentSlotIndex]);
         currentSlotIndex++;
         timer.reset();
     }
