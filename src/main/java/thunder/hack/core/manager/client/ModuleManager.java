@@ -53,7 +53,7 @@ public class ModuleManager implements IManager {
     public static NoServerRotate noServerRotate = new NoServerRotate();
     public static BreakHighLight breakHighLight = new BreakHighLight();
     public static BlockHighLight blockHighLight = new BlockHighLight();
-    public static tridentBoost TridentBoost = new TridentBoost();
+    public static TridentBoost tridentBoost = new TridentBoost();
     public static AntiBallPlace antiBallPlace = new AntiBallPlace();
     public static AntiBadEffects antiBadEffects = new AntiBadEffects();
     public static MouseElytraFix mouseElytraFix = new MouseElytraFix();
