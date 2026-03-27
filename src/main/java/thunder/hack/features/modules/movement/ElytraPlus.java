@@ -511,110 +511,60 @@ public class ElytraPlus extends Module {
     }
 
     private void doBoost(EventMove e) {
+        // Проверка: есть ли элитра?
         if (mc.player.getInventory().getStack(38).getItem() != Items.ELYTRA) {
             return;
         }
         
         // ===== ВЗЛЕТ С МЕСТА =====
         if (mc.player.isOnGround() && mc.options.jumpKey.isPressed()) {
+            // Прыжок вверх
             mc.player.setVelocity(mc.player.getVelocity().x, 1.2, mc.player.getVelocity().z);
             mc.player.jump();
+            // Активируем элитру
             sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
-            // Сбрасываем состояние цикла
-            cycleState = 0;
-            cycleTimer.reset();
+            // Небольшая задержка, чтобы не спамить
+            boostCooldownTimer.reset();
             return;
         }
         
+        // Если не летим или в воде/лаве — выходим
         if (!mc.player.isFallFlying() || mc.player.isTouchingWater() || mc.player.isInLava()) {
             return;
         }
         
-        // ===== АВТОМАТИЧЕСКИЙ ЦИКЛ: ВНИЗ → РЕЗКО ВВЕРХ =====
+        // ===== ПОЛЕТ =====
         
         int currentPing = getCurrentPing();
         if (currentPing == 0) currentPing = 140;
         
-        // Управляем циклом по таймеру
-        // cycleState: 0 = смотрим вниз, 1 = падаем, 2 = резко вверх, 3 = пауза
-        if (cycleTimer.passedMs(cycleDuration)) {
-            cycleState = (cycleState + 1) % 4;
-            cycleTimer.reset();
-            
-            // Меняем угол обзора в зависимости от фазы
-            switch (cycleState) {
-                case 0: // Смотрим вниз
-                    mc.player.setPitch(25f);
-                    cycleDuration = 200; // 200 мс смотрим вниз
-                    break;
-                case 1: // Падаем вниз (усиливаем падение)
-                    mc.player.setPitch(30f);
-                    cycleDuration = 150; // 150 мс падаем
-                    break;
-                case 2: // Резко вверх
-                    mc.player.setPitch(-40f);
-                    cycleDuration = 100; // 100 мс взлетаем
-                    break;
-                case 3: // Пауза (ровный полет)
-                    mc.player.setPitch(0f);
-                    cycleDuration = 80; // 80 мс пауза
-                    break;
-            }
-        }
+        // Простая задержка между бустами (зависит от пинга)
+        // Для твоего пинга 140: ~112 мс между бустами
+        long minDelay = Math.min(300, Math.max(60, (long)(currentPing * 0.8)));
         
-        // Динамическая задержка между бустами (стабильность)
-        long boostDelay;
-        switch (cycleState) {
-            case 0: // смотрим вниз — готовимся
-                boostDelay = Math.min(200, Math.max(40, (long)(currentPing * 0.6)));
-                break;
-            case 1: // падение — частые бусты для ускорения
-                boostDelay = Math.min(150, Math.max(30, (long)(currentPing * 0.4)));
-                break;
-            case 2: // взлет — средние бусты
-                boostDelay = Math.min(180, Math.max(50, (long)(currentPing * 0.5)));
-                break;
-            default: // пауза
-                boostDelay = Math.min(250, Math.max(80, (long)(currentPing * 0.8)));
-                break;
-        }
-        
-        if (!boostCooldownTimer.passedMs(boostDelay)) {
+        if (!boostCooldownTimer.passedMs(minDelay)) {
             return;
         }
         
         // ===== ПРИМЕНЯЕМ БУСТ =====
         
-        float moveForward = mc.player.input.movementForward;
-        
-        // Сила буста зависит от фазы
-        float boostPower;
-        switch (cycleState) {
-            case 1: // падение — слабый буст вниз
-                boostPower = factor.getValue() * 0.7f;
-                break;
-            case 2: // взлет — сильный буст вверх
-                boostPower = factor.getValue() * 1.3f;
-                break;
-            default:
-                boostPower = factor.getValue();
-                break;
-        }
-        
-        // Горизонтальный буст
+        // Горизонтальный буст (если включен 2b2t)
         if (twoBee.getValue()) {
-            double[] dir = MovementUtility.forwardWithoutStrafe(boostPower / 10f);
+            double[] dir = MovementUtility.forwardWithoutStrafe(factor.getValue() / 10f);
             e.setX(e.getX() + dir[0]);
             e.setZ(e.getZ() + dir[1]);
         }
         
-        // Вертикальный буст
-        if (cycleState == 1) {
-            // Падение вниз
-            e.setY(e.getY() - 0.25 * boostPower);
-        } else if (cycleState == 2) {
-            // Резкий взлет вверх
-            e.setY(e.getY() + 0.45 * boostPower);
+        // Вертикальный контроль (только если зажат пробел)
+        if (mc.options.jumpKey.isPressed()) {
+            // Набор высоты
+            e.setY(e.getY() + 0.2);
+        } else if (mc.options.sneakKey.isPressed()) {
+            // Спуск
+            e.setY(e.getY() - 0.15);
+        } else {
+            // Ровный полет — чуть-чуть падаем для стабильности
+            e.setY(e.getY() - 0.02);
         }
         
         // Ограничение скорости
@@ -624,9 +574,11 @@ public class ElytraPlus extends Module {
             e.setZ(e.getZ() * maxSpeed.getValue() / speed);
         }
         
+        // Применяем движение
         mc.player.setVelocity(e.getX(), e.getY(), e.getZ());
         e.cancel();
         
+        // Сбрасываем таймер
         boostCooldownTimer.reset();
     }
     
