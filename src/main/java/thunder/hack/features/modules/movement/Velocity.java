@@ -1,193 +1,157 @@
 package thunder.hack.features.modules.movement;
 
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket;
-import net.minecraft.network.packet.s2c.play.ExplosionS2CPacket;
-import net.minecraft.network.packet.s2c.play.PlayerPositionLookS2CPacket;
+import net.minecraft.item.BlockItem;
+import net.minecraft.network.packet.c2s.play.*;
+import net.minecraft.util.Hand;
+import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
-import thunder.hack.core.manager.client.ModuleManager;
-import thunder.hack.events.impl.PacketEvent;
+import net.minecraft.util.math.Vec3d;
+import thunder.hack.events.impl.EventMove;
+import thunder.hack.events.impl.EventSync;
 import thunder.hack.features.modules.Module;
-import thunder.hack.injection.accesors.IClientPlayerEntity;
-import thunder.hack.injection.accesors.IExplosionS2CPacket;
-import thunder.hack.injection.accesors.ISPacketEntityVelocity;
 import thunder.hack.setting.Setting;
 import thunder.hack.utility.Timer;
+import thunder.hack.utility.player.InventoryUtility;
 import thunder.hack.utility.player.MovementUtility;
+import thunder.hack.utility.player.SearchInvResult;
 
-public class Velocity extends Module {
-    public Velocity() {
-        super("Velocity", Category.MOVEMENT);
+import static thunder.hack.utility.player.InteractionUtility.BlockPosWithFacing;
+import static thunder.hack.utility.player.InteractionUtility.checkNearBlocks;
+
+public class Scaffold extends Module {
+    public Scaffold() {
+        super("Scaffold", Category.MOVEMENT);
     }
 
-    // ===== НАСТРОЙКИ =====
-    public Setting<Boolean> onlyAura = new Setting<>("OnlyDuringAura", false);
-    public Setting<Boolean> pauseInWater = new Setting<>("PauseInLiquids", false);
-    public Setting<Boolean> explosions = new Setting<>("Explosions", true);
-    public Setting<Boolean> cc = new Setting<>("PauseOnFlag", false);
-    public Setting<Boolean> fire = new Setting<>("PauseOnFire", false);
+    private final Setting<Float> speed = new Setting<>("Speed", 0.98f, 0.8f, 1.0f);
+    private final Setting<Integer> cps = new Setting<>("CPS", 12, 1, 20);
+    private final Setting<Boolean> lockY = new Setting<>("LockY", true);
     
-    private final Setting<Mode> mode = new Setting<>("Mode", Mode.GrimNew);
+    private final Timer placeTimer = new Timer();
+    private BlockPosWithFacing targetBlock = null;
+    private int targetY = -1;
     
-    // ===== НАСТРОЙКИ ДЛЯ JUMP RESET (GrimNew) =====
-    public Setting<Boolean> jumpReset = new Setting<>("JumpReset", true, v -> mode.is(Mode.GrimNew));
-    public Setting<Float> jumpMotion = new Setting<>("JumpMotion", 0.42f, 0.4f, 0.5f, v -> mode.is(Mode.GrimNew) && jumpReset.getValue());
-    public Setting<Integer> jumpDelay = new Setting<>("JumpDelay", 100, 50, 300, v -> mode.is(Mode.GrimNew) && jumpReset.getValue());
-    public Setting<Boolean> reverse = new Setting<>("Reverse", true, v -> mode.is(Mode.GrimNew));
-    
-    // ===== ПЕРЕМЕННЫЕ =====
-    private boolean flag;
-    private int ccCooldown;
-    private final Timer jumpTimer = new Timer();
-    private boolean shouldJump = false;
-    private double lastVelocityY = 0;
-
-    @EventHandler
-    public void onPacketReceive(PacketEvent.Receive e) {
-        if (fullNullCheck()) return;
-
-        // Проверки на паузу
-        if (mc.player != null && (mc.player.isTouchingWater() || mc.player.isSubmergedInWater() || mc.player.isInLava()) && pauseInWater.getValue())
-            return;
-
-        if (mc.player != null && mc.player.isOnFire() && fire.getValue() && (mc.player.hurtTime > 0)) {
-            return;
-        }
-
-        if (ccCooldown > 0) {
-            ccCooldown--;
-            return;
-        }
-
-        // ===== ОБРАБОТКА ВЕЛОСИТИ =====
-        if (e.getPacket() instanceof EntityVelocityUpdateS2CPacket pac) {
-            if (pac.getId() == mc.player.getId() && (!onlyAura.getValue() || ModuleManager.aura.isEnabled())) {
-                
-                switch (mode.getValue()) {
-                    case Cancel -> {
-                        // Полное обнуление
-                        e.cancel();
-                    }
-                    case GrimNew -> {
-                        // Реверсивный режим для Grim
-                        e.cancel();
-                        flag = true;
-                        
-                        // Сохраняем вертикальную скорость для прыжка
-                        if (jumpReset.getValue()) {
-                            lastVelocityY = pac.getVelocityY() / 8000.0; // конвертируем в игровую скорость
-                        }
-                    }
-                }
-            }
-        }
-
-        // ===== ОБРАБОТКА ВЗРЫВОВ =====
-        if (e.getPacket() instanceof ExplosionS2CPacket explosion && explosions.getValue()) {
-            switch (mode.getValue()) {
-                case Cancel -> {
-                    ((IExplosionS2CPacket) explosion).setMotionX(0);
-                    ((IExplosionS2CPacket) explosion).setMotionY(0);
-                    ((IExplosionS2CPacket) explosion).setMotionZ(0);
-                }
-                case GrimNew -> {
-                    ((IExplosionS2CPacket) explosion).setMotionX(0);
-                    ((IExplosionS2CPacket) explosion).setMotionY(0);
-                    ((IExplosionS2CPacket) explosion).setMotionZ(0);
-                    flag = true;
-                }
-            }
-        }
-
-        // ===== ОБРАБОТКА LAGBACK (флаги) =====
-        if (e.getPacket() instanceof PlayerPositionLookS2CPacket) {
-            if (cc.getValue() || mode.is(Mode.GrimNew))
-                ccCooldown = 5;
-        }
-    }
-
     @Override
     public void onUpdate() {
         if (fullNullCheck()) return;
         
-        // Проверки на паузу
-        if ((mc.player.isTouchingWater() || mc.player.isSubmergedInWater() || mc.player.isInLava()) && pauseInWater.getValue())
-            return;
-
-        if (mc.player.isOnFire() && fire.getValue() && (mc.player.hurtTime > 0))
-            return;
-
-        // ===== ОСНОВНАЯ ЛОГИКА =====
-        switch (mode.getValue()) {
-            case Cancel -> {
-                // Ничего не делаем, просто отменяем пакеты
-            }
-            case GrimNew -> {
-                // Реверсивная логика
-                if (flag) {
-                    if (ccCooldown <= 0) {
-                        // Отправляем пакет с последними легитными ротациями
-                        sendPacket(new PlayerMoveC2SPacket.Full(
-                            mc.player.getX(), 
-                            mc.player.getY(), 
-                            mc.player.getZ(), 
-                            ((IClientPlayerEntity) mc.player).getLastYaw(), 
-                            ((IClientPlayerEntity) mc.player).getLastPitch(), 
-                            mc.player.isOnGround()
-                        ));
-                        
-                        // Отправляем STOP_DESTROY_BLOCK для синхронизации
-                        sendPacket(new PlayerActionC2SPacket(
-                            PlayerActionC2SPacket.Action.STOP_DESTROY_BLOCK, 
-                            BlockPos.ofFloored(mc.player.getPos()), 
-                            Direction.DOWN
-                        ));
-                    }
-                    flag = false;
-                }
-                
-                // ===== JUMP RESET (легитный джамп после получения велосити) =====
-                if (jumpReset.getValue() && lastVelocityY > 0 && mc.player.isOnGround() && !mc.player.isTouchingWater()) {
-                    if (jumpTimer.passedMs(jumpDelay.getValue())) {
-                        shouldJump = true;
-                        jumpTimer.reset();
-                    }
-                }
-                
-                // Выполняем прыжок
-                if (shouldJump && mc.player.isOnGround()) {
-                    if (reverse.getValue()) {
-                        // Реверсивный прыжок (в противоположную сторону от удара)
-                        double yaw = Math.toRadians(mc.player.getYaw());
-                        double moveX = -Math.sin(yaw) * 0.2;
-                        double moveZ = Math.cos(yaw) * 0.2;
-                        mc.player.setVelocity(moveX, jumpMotion.getValue(), moveZ);
-                    } else {
-                        // Обычный прыжок
-                        mc.player.setVelocity(mc.player.getVelocity().x, jumpMotion.getValue(), mc.player.getVelocity().z);
-                    }
-                    mc.player.jump();
-                    shouldJump = false;
-                    lastVelocityY = 0;
-                }
+        // Lock Y
+        if (lockY.getValue() && targetY != -1) {
+            double dy = targetY - mc.player.getY();
+            if (Math.abs(dy) > 0.1) {
+                mc.player.setPosition(mc.player.getX(), targetY, mc.player.getZ());
             }
         }
+        
+        // Поиск блока для постановки
+        BlockPos below = BlockPos.ofFloored(mc.player.getX(), mc.player.getY() - 1, mc.player.getZ());
+        if (mc.world.getBlockState(below).isReplaceable()) {
+            targetBlock = findValidBlock(below);
+        } else {
+            targetBlock = null;
+            targetY = (int) mc.player.getY();
+        }
+        
+        // Постановка блока
+        if (targetBlock != null && placeTimer.passedMs(1000 / cps.getValue())) {
+            placeBlock(targetBlock);
+            placeTimer.reset();
+        }
     }
-
-    @Override
-    public void onEnable() {
-        flag = false;
-        ccCooldown = 0;
-        shouldJump = false;
-        lastVelocityY = 0;
-        jumpTimer.reset();
+    
+    @EventHandler
+    public void onMove(EventMove e) {
+        if (fullNullCheck()) return;
+        
+        // Замедление для легитного движения
+        if (MovementUtility.isMoving()) {
+            e.setX(e.getX() * speed.getValue());
+            e.setZ(e.getZ() * speed.getValue());
+            e.cancel();
+        }
     }
-
-    public enum Mode {
-        Cancel,      // Полное обнуление велосити
-        GrimNew      // Реверсивный режим + Jump Reset для Grim
+    
+    @EventHandler
+    public void onSync(EventSync e) {
+        if (targetBlock != null && targetY != -1) {
+            // Серверные ротации (строго на видимую часть блока)
+            Vec3d hitVec = new Vec3d(
+                targetBlock.position().getX() + 0.5,
+                targetBlock.position().getY() + 0.5,
+                targetBlock.position().getZ() + 0.5
+            ).add(new Vec3d(targetBlock.facing().getUnitVector()).multiply(0.5));
+            
+            float[] rotations = getRotations(hitVec);
+            
+            // Отправляем пакет с ротациями
+            sendPacket(new PlayerMoveC2SPacket.Full(
+                mc.player.getX(), mc.player.getY(), mc.player.getZ(),
+                rotations[0], rotations[1], mc.player.isOnGround()
+            ));
+        }
+    }
+    
+    private BlockPosWithFacing findValidBlock(BlockPos below) {
+        // Сначала проверяем блок под ногами
+        BlockPosWithFacing result = checkNearBlocks(below);
+        if (result != null && isFacingVisible(result)) return result;
+        
+        // Проверяем соседние блоки
+        for (Direction dir : Direction.values()) {
+            if (dir == Direction.UP || dir == Direction.DOWN) continue;
+            result = checkNearBlocks(below.offset(dir));
+            if (result != null && isFacingVisible(result)) return result;
+        }
+        return null;
+    }
+    
+    private boolean isFacingVisible(BlockPosWithFacing b) {
+        // Проверяем, видна ли сторона блока, на которую целится
+        BlockPos neighbor = b.position().offset(b.facing());
+        return mc.world.getBlockState(neighbor).isAir();
+    }
+    
+    private void placeBlock(BlockPosWithFacing b) {
+        // Поиск блока в руке
+        int slot = getBlockSlot();
+        if (slot == -1) return;
+        
+        // Смена слота
+        int prevSlot = mc.player.getInventory().selectedSlot;
+        if (slot != prevSlot) {
+            InventoryUtility.switchTo(slot);
+        }
+        
+        // Пакет взаимодействия
+        BlockHitResult bhr = new BlockHitResult(
+            new Vec3d(b.position().getX() + 0.5, b.position().getY() + 0.5, b.position().getZ() + 0.5)
+                .add(new Vec3d(b.facing().getUnitVector()).multiply(0.5)),
+            b.facing(), b.position(), false
+        );
+        
+        sendSequencedPacket(id -> new PlayerInteractBlockC2SPacket(Hand.MAIN_HAND, bhr, id));
+        mc.player.networkHandler.sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
+        
+        // Возврат слота
+        if (slot != prevSlot) {
+            InventoryUtility.switchTo(prevSlot);
+        }
+    }
+    
+    private int getBlockSlot() {
+        if (mc.player.getMainHandStack().getItem() instanceof BlockItem) {
+            return mc.player.getInventory().selectedSlot;
+        }
+        SearchInvResult result = InventoryUtility.findInHotBar(i -> i.getItem() instanceof BlockItem);
+        return result.found() ? result.slot() : -1;
+    }
+    
+    private float[] getRotations(Vec3d target) {
+        Vec3d diff = target.subtract(mc.player.getEyePos());
+        double yaw = Math.toDegrees(Math.atan2(diff.z, diff.x)) - 90;
+        double pitch = -Math.toDegrees(Math.atan2(diff.y, Math.hypot(diff.x, diff.z)));
+        return new float[]{(float) yaw, (float) pitch};
     }
 }
