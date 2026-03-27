@@ -40,10 +40,11 @@ public class Scaffold extends Module {
     private final Setting<Boolean> safewalk = new Setting<>("SafeWalk", true, v -> !mode.is(Mode.Grim) && !mode.is(Mode.Sofia));
     private final Setting<Boolean> echestholding = new Setting<>("EchestHolding", false);
     
-    // ===== НОВЫЕ НАСТРОЙКИ ДЛЯ РЕЖИМА SOFIA =====
+    // ===== НАСТРОЙКИ ДЛЯ РЕЖИМА SOFIA =====
     private final Setting<Float> sofiaWalkSpeed = new Setting<>("SofiaWalkSpeed", 0.98f, 0.5f, 1.0f, v -> mode.is(Mode.Sofia));
     private final Setting<Float> sofiaStrafeAmount = new Setting<>("SofiaStrafe", 0.03f, 0.01f, 0.1f, v -> mode.is(Mode.Sofia));
     private final Setting<Boolean> sofiaAutoLockY = new Setting<>("SofiaAutoLockY", true, v -> mode.is(Mode.Sofia));
+    private final Setting<Integer> sofiaKeepRotationTicks = new Setting<>("SofiaKeepRotation", 3, 1, 10, v -> mode.is(Mode.Sofia));
     
     private final Setting<SettingGroup> renderCategory = new Setting<>("Render", new SettingGroup(false, 0));
     private final Setting<Boolean> render = new Setting<>("Render", true).addToGroup(renderCategory);
@@ -65,12 +66,13 @@ public class Scaffold extends Module {
     private BlockPosWithFacing currentblock;
     private int prevY;
     
-    // ===== ПЕРЕМЕННЫЕ ДЛЯ SOFIA =====
+    // ===== ПЕРЕМЕННЫЕ ДЛЯ SOFIA (серверные ротации) =====
     private float sofiaStrafeTimer = 0;
     private float sofiaStrafeDirection = 1;
-    private int sofiaRotationTick = 0;
-    private float sofiaTargetYaw = 0;
-    private float sofiaTargetPitch = 0;
+    private float serverYaw = 0;
+    private float serverPitch = 0;
+    private int keepRotationTicks = 0;
+    private boolean hasRotated = false;
 
     public Scaffold() {
         super("Scaffold", Category.MOVEMENT);
@@ -81,7 +83,8 @@ public class Scaffold extends Module {
         prevY = -999;
         sofiaStrafeTimer = 0;
         sofiaStrafeDirection = 1;
-        sofiaRotationTick = 0;
+        keepRotationTicks = 0;
+        hasRotated = false;
     }
 
     @EventHandler
@@ -93,13 +96,12 @@ public class Scaffold extends Module {
             double x = event.getX();
             double z = event.getZ();
             
-            // Плавное замедление для имитации ансофта
             if (MovementUtility.isMoving()) {
                 x *= sofiaWalkSpeed.getValue();
                 z *= sofiaWalkSpeed.getValue();
             }
             
-            // Легкое "шатание" в стороны (имитация мыши)
+            // Легкое "шатание" в стороны (имитация ансофта)
             if (MovementUtility.isMoving() && mc.player.isOnGround()) {
                 sofiaStrafeTimer += 0.02f;
                 if (sofiaStrafeTimer > 1.0f) {
@@ -175,6 +177,11 @@ public class Scaffold extends Module {
             preAction();
             postAction();
         }
+        
+        // Уменьшаем счетчик удержания ротации
+        if (keepRotationTicks > 0) {
+            keepRotationTicks--;
+        }
     }
 
     @EventHandler
@@ -203,7 +210,7 @@ public class Scaffold extends Module {
 
         BlockPos blockPos2;
         
-        // ===== SOFIA LOCK Y =====
+        // Lock Y для Sofia
         if (mode.is(Mode.Sofia) && sofiaAutoLockY.getValue() && prevY != -999) {
             blockPos2 = BlockPos.ofFloored(mc.player.getX(), prevY, mc.player.getZ());
         } else if (lockY.getValue() && prevY != -999) {
@@ -216,31 +223,19 @@ public class Scaffold extends Module {
 
         currentblock = checkNearBlocksExtended(blockPos2);
         
-        // ===== SOFIA РОТАЦИИ (с имитацией движения мыши) =====
+        // ===== SOFIA: только вычисляем ротации, НЕ меняем клиентскую камеру =====
         if (currentblock != null && rotate.getValue()) {
             Vec3d hitVec = new Vec3d(currentblock.position().getX() + 0.5, currentblock.position().getY() + 0.5, currentblock.position().getZ() + 0.5).add(new Vec3d(currentblock.facing().getUnitVector()).multiply(0.5));
             float[] rotations = InteractionUtility.calculateAngle(hitVec);
             
             if (mode.is(Mode.Sofia)) {
-                // Плавная интерполяция ротаций (имитация "легкого движения мышкой")
-                sofiaRotationTick++;
-                float smoothFactor = 0.3f + (float) Math.sin(sofiaRotationTick * 0.1f) * 0.05f;
-                
-                if (sofiaTargetYaw == 0) sofiaTargetYaw = rotations[0];
-                if (sofiaTargetPitch == 0) sofiaTargetPitch = rotations[1];
-                
-                sofiaTargetYaw = rotations[0];
-                sofiaTargetPitch = rotations[1];
-                
-                float currentYaw = mc.player.getYaw();
-                float currentPitch = mc.player.getPitch();
-                
-                float newYaw = currentYaw + (sofiaTargetYaw - currentYaw) * smoothFactor;
-                float newPitch = currentPitch + (sofiaTargetPitch - currentPitch) * smoothFactor;
-                
-                mc.player.setYaw(newYaw);
-                mc.player.setPitch(newPitch);
+                // Сохраняем ротации для отправки в пакетах
+                serverYaw = rotations[0];
+                serverPitch = rotations[1];
+                hasRotated = true;
+                // keepRotationTicks устанавливается при отправке пакета
             } else {
+                // Для других режимов меняем клиентскую камеру
                 mc.player.setYaw(rotations[0]);
                 mc.player.setPitch(rotations[1]);
             }
@@ -274,7 +269,7 @@ public class Scaffold extends Module {
 
             BlockHitResult bhr;
 
-            // ===== SOFIA: точная установка блока =====
+            // Точная установка блока для Sofia
             if (mode.is(Mode.StrictNCP) || mode.is(Mode.Sofia)) {
                 bhr = new BlockHitResult(new Vec3d(currentblock.position().getX() + 0.5, currentblock.position().getY() + 0.5, currentblock.position().getZ() + 0.5).add(new Vec3d(currentblock.facing().getUnitVector()).multiply(0.5)), currentblock.facing(), currentblock.position(), false);
             } else {
@@ -282,14 +277,28 @@ public class Scaffold extends Module {
             }
 
             float[] rotations = InteractionUtility.calculateAngle(bhr.getPos());
+            boolean useServerRotations = mode.is(Mode.Grim) || mode.is(Mode.Sofia);
+            
+            // Для Sofia используем сохраненные ротации
+            float finalYaw = useServerRotations ? (hasRotated ? serverYaw : rotations[0]) : rotations[0];
+            float finalPitch = useServerRotations ? (hasRotated ? serverPitch : rotations[1]) : rotations[1];
+            
+            // Устанавливаем keepRotationTicks для удержания ротации
+            if (mode.is(Mode.Sofia) && hasRotated) {
+                keepRotationTicks = sofiaKeepRotationTicks.getValue();
+                hasRotated = false;
+            }
 
             boolean sneak = InteractionUtility.needSneak(mc.world.getBlockState(bhr.getBlockPos()).getBlock()) && !mc.player.isSneaking();
 
             if (sneak)
                 mc.player.networkHandler.sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.PRESS_SHIFT_KEY));
 
-            if (mode.is(Mode.Grim) || mode.is(Mode.Sofia))
-                sendPacket(new PlayerMoveC2SPacket.Full(mc.player.getX(), mc.player.getY(), mc.player.getZ(), rotations[0], rotations[1], mc.player.isOnGround()));
+            // ===== КЛЮЧЕВОЕ: отправляем пакет с серверными ротациями =====
+            if (useServerRotations) {
+                // Отправляем пакет движения с нужными ротациями
+                sendPacket(new PlayerMoveC2SPacket.Full(mc.player.getX(), mc.player.getY(), mc.player.getZ(), finalYaw, finalPitch, mc.player.isOnGround()));
+            }
 
             if (placeMode.getValue() == InteractionUtility.PlaceMode.Packet && !mode.is(Mode.Grim) && !mode.is(Mode.Sofia)) {
                 boolean finalIsOffhand = prevItem == -2;
@@ -305,8 +314,11 @@ public class Scaffold extends Module {
             if (sneak)
                 mc.player.networkHandler.sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.RELEASE_SHIFT_KEY));
 
-            if (mode.is(Mode.Grim) || mode.is(Mode.Sofia))
+            // Отправляем второй пакет для восстановления ротации (если нужно)
+            if (useServerRotations && keepRotationTicks > 0) {
+                // Возвращаем клиентские ротации в следующем пакете
                 sendPacket(new PlayerMoveC2SPacket.Full(mc.player.getX(), mc.player.getY(), mc.player.getZ(), mc.player.getYaw(), mc.player.getPitch(), mc.player.isOnGround()));
+            }
 
             if (render.getValue())
                 BlockAnimationUtility.renderBlock(currentblock.position(), renderLineColor.getValue().getColorObject(), renderLineWidth.getValue(), renderFillColor.getValue().getColorObject(), animationMode.getValue(), renderMode.getValue());
