@@ -10,11 +10,15 @@ public class NameProtect extends Module {
         super("NameProtect", Category.MISC);
     }
 
+    // ===== НАСТРОЙКИ =====
     private final Setting<Mode> mode = new Setting<>("Mode", Mode.Default);
     private final Setting<String> customName = new Setting<>("CustomName", "Hell_Raider", v -> mode.is(Mode.Default));
-    private final Setting<Boolean> hideFriends = new Setting<>("HideFriends", true);
     private final Setting<String> targetName = new Setting<>("TargetName", "player123", v -> mode.is(Mode.Fake));
     private final Setting<String> fakeName = new Setting<>("FakeName", "&cFakeNick", v -> mode.is(Mode.Fake));
+    
+    // ===== ПУБЛИЧНЫЕ СТАТИЧЕСКИЕ ПОЛЯ ДЛЯ СОВМЕСТИМОСТИ =====
+    public static Setting<String> newName = new Setting<>("name", "Hell_Raider");
+    public static Setting<Boolean> hideFriends = new Setting<>("Hide friends", true);
 
     public enum Mode {
         Default,     // Замена своего ника
@@ -22,24 +26,6 @@ public class NameProtect extends Module {
         Obfuscated   // Искаженный текст
     }
 
-    // ===== СТАРЫЕ ПОЛЯ ДЛЯ СОВМЕСТИМОСТИ =====
-    public static Setting<String> newName = new Setting<>("name", "Hell_Raider");
-    public static Setting<Boolean> hideFriendsStatic = new Setting<>("Hide friends", true);
-    
-    // Для совместимости со старым кодом
-    public static boolean hideFriends() {
-        return ModuleManager.nameProtect.isEnabled() && hideFriendsStatic.getValue();
-    }
-    
-    public static String getCustomName() {
-        if (!ModuleManager.nameProtect.isEnabled()) {
-            return mc.getGameProfile().getName();
-        }
-        return newName.getValue().replaceAll("&", "\u00a7");
-    }
-
-    // ===== НОВЫЕ МЕТОДЫ ДЛЯ 3 РЕЖИМОВ =====
-    
     // Получение имени для отображения
     public static String getFormattedName(PlayerEntity player) {
         if (!ModuleManager.nameProtect.isEnabled()) {
@@ -65,7 +51,6 @@ public class NameProtect extends Module {
                 break;
                 
             case Obfuscated:
-                // Искажаем все имена
                 String original = player.getDisplayName().getString();
                 String clean = original.replaceAll("§[0-9a-fk-or]", "");
                 return "§k" + clean + "§r";
@@ -74,7 +59,7 @@ public class NameProtect extends Module {
         return player.getDisplayName().getString();
     }
     
-    // Получение собственного имени (для Default режима)
+    // Получение собственного имени
     public static String getOwnName() {
         if (!ModuleManager.nameProtect.isEnabled()) {
             return mc.getGameProfile().getName();
@@ -84,5 +69,13 @@ public class NameProtect extends Module {
             return np.customName.getValue().replace("&", "§");
         }
         return mc.getGameProfile().getName();
+    }
+    
+    // Для совместимости со старым кодом
+    public static String getCustomName() {
+        if (!ModuleManager.nameProtect.isEnabled()) {
+            return mc.getGameProfile().getName();
+        }
+        return newName.getValue().replaceAll("&", "\u00a7");
     }
 }
