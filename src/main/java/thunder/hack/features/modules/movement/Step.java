@@ -9,7 +9,7 @@ import thunder.hack.events.impl.EventSync;
 import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
 import thunder.hack.utility.Timer;
-import thunder.hack.utility.player.MovementUtility;
+import thunder.hack.utility.world.HoleUtility;
 
 public class Step extends Module {
     // ===== НАСТРОЙКИ =====
@@ -40,7 +40,7 @@ public class Step extends Module {
 
     @Override
     public void onEnable() {
-        alreadyInHole = mc.player != null && MovementUtility.isHole(mc.player.getBlockPos());
+        alreadyInHole = mc.player != null && HoleUtility.isHole(mc.player.getBlockPos());
         isStepping = false;
         stepStage = 0;
         stepTimer.reset();
@@ -59,11 +59,11 @@ public class Step extends Module {
         if (fullNullCheck()) return;
         
         // Проверка на дыру
-        if (holeDisable.getValue() && MovementUtility.isHole(mc.player.getBlockPos()) && !alreadyInHole) {
+        if (holeDisable.getValue() && HoleUtility.isHole(mc.player.getBlockPos()) && !alreadyInHole) {
             disable("Player in hole... Disabling...");
             return;
         }
-        alreadyInHole = mc.player != null && MovementUtility.isHole(mc.player.getBlockPos());
+        alreadyInHole = mc.player != null && HoleUtility.isHole(mc.player.getBlockPos());
 
         // Проверка на паузу
         if (pauseIfShift.getValue() && mc.options.sneakKey.isPressed()) {
@@ -130,7 +130,7 @@ public class Step extends Module {
     }
     
     private boolean shouldStep() {
-        if (!MovementUtility.isMoving()) return false;
+        if (!isMoving()) return false;
         
         // Проверяем, есть ли блок перед игроком на высоте
         double yawRad = Math.toRadians(mc.player.getYaw());
@@ -155,6 +155,10 @@ public class Step extends Module {
         }
         
         return false;
+    }
+    
+    private boolean isMoving() {
+        return mc.player.input.movementForward != 0 || mc.player.input.movementSideways != 0;
     }
     
     private void doGrimStep() {
