@@ -1,10 +1,6 @@
 package thunder.hack.features.modules.movement;
 
-import meteordevelopment.orbit.EventHandler;
 import net.minecraft.entity.attribute.EntityAttributes;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import thunder.hack.ThunderHack;
-import thunder.hack.events.impl.EventSync;
 import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
 import thunder.hack.utility.Timer;
@@ -30,13 +26,6 @@ public class Step extends Module {
             timer.reset();
         } else if (!stepping) {
             setStepHeight(0.6f);
-        }
-    }
-    
-    @EventHandler
-    public void onSync(EventSync e) {
-        if (stepping && mc.player.isOnGround()) {
-            stepping = false;
         }
     }
     
