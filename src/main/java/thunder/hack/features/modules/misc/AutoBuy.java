@@ -14,8 +14,9 @@ public class AutoBuy extends Module {
 
     private final Setting<Integer> delay = new Setting<>("Delay", 250, 50, 1000);
 
-    // Слоты для кликов по порядку (с нуля)
-    private final int[] slots = {4, 22, 21, 4, 29, 28, 21, 6, 22};
+    // Слоты для кликов по порядку (с 0)
+    // Твои номера (с 1): 4, 23, 22, 5, 30, 29, 22, 7, 23
+    private final int[] slots = {3, 22, 21, 4, 29, 28, 21, 6, 22};
     
     private final Timer timer = new Timer();
     private int currentSlotIndex = 0;
