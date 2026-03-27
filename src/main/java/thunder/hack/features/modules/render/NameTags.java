@@ -9,6 +9,7 @@ import net.minecraft.block.entity.MobSpawnerBlockEntity;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.network.PlayerListEntry;
 import net.minecraft.client.render.DiffuseLighting;
+import net.minecraft.component.ComponentType;
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.component.type.ContainerComponent;
 import net.minecraft.component.type.ItemEnchantmentsComponent;
@@ -31,6 +32,7 @@ import net.minecraft.scoreboard.ScoreboardDisplaySlot;
 import net.minecraft.scoreboard.ScoreboardObjective;
 import net.minecraft.scoreboard.number.StyledNumberFormat;
 import net.minecraft.text.MutableText;
+import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.MathHelper;
@@ -123,16 +125,15 @@ public class NameTags extends Module {
                 position.z = Math.max(vector.x, position.z);
             }
 
+            // ===== ПОЛУЧАЕМ ФОРМАТИРОВАННОЕ ИМЯ С ЦВЕТАМИ =====
+            String playerName = getFormattedPlayerName(ent);
+            
             String final_string = "";
 
             if (ping.getValue()) final_string += getPingColor(getEntityPing(ent)) + getEntityPing(ent) + "ms " + Formatting.WHITE;
             if (gamemode.getValue()) final_string += translateGamemode(getEntityGamemode(ent)) + " ";
 
-            if (FriendManager.friends.stream().anyMatch(i -> i.contains(ent.getDisplayName().getString())) && NameProtect.hideFriends.getValue() && ModuleManager.nameProtect.isEnabled()) {
-                final_string += NameProtect.getCustomName() + " ";
-            } else {
-                final_string += ent.getDisplayName().getString() + " ";
-            }
+            final_string += playerName + " ";
 
             if (hp.getValue() && health.is(Health.Number)) {
                 final_string += getHealthColor(getHealth(ent)) + round2(getHealth(ent)) + " ";
@@ -151,8 +152,10 @@ public class NameTags extends Module {
                 float diff = (float) (endPosX - posX) / 2;
                 float textWidth;
 
-                if (font.getValue() == Font.Fancy) textWidth = (FontRenderers.sf_bold.getStringWidth(final_string) * 1);
-                else textWidth = mc.textRenderer.getWidth(final_string);
+                // Убираем форматирование для подсчета ширины
+                String plainString = Formatting.strip(final_string);
+                if (font.getValue() == Font.Fancy) textWidth = (FontRenderers.sf_bold.getStringWidth(plainString) * 1);
+                else textWidth = mc.textRenderer.getWidth(plainString);
 
                 float tagX = (float) ((posX + diff - textWidth / 2) * 1);
 
@@ -276,6 +279,7 @@ public class NameTags extends Module {
 
 
                 if (font.getValue() == Font.Fancy) {
+                    // Рисуем с форматированием
                     FontRenderers.sf_bold.drawString(context.getMatrices(), final_string, tagX, (float) posY - 10, -1);
                 } else {
                     context.getMatrices().push();
@@ -308,6 +312,36 @@ public class NameTags extends Module {
 
         if (spawners.getValue()) drawSpawnerNameTag(context);
         if (entityOwner.getValue()) drawEntityOwner(context);
+    }
+
+    // ===== НОВЫЙ МЕТОД ДЛЯ ПОЛУЧЕНИЯ ФОРМАТИРОВАННОГО ИМЕНИ =====
+    private String getFormattedPlayerName(PlayerEntity player) {
+        // Получаем TabList запись игрока
+        PlayerListEntry entry = mc.getNetworkHandler().getPlayerListEntry(player.getUuid());
+        
+        if (entry != null) {
+            // Пытаемся получить отформатированное имя из TabList
+            Text displayName = entry.getDisplayName();
+            if (displayName != null) {
+                // Сохраняем форматирование
+                String formatted = displayName.getString();
+                // Если есть форматирование, возвращаем его
+                if (formatted.contains("§") || formatted.contains("&")) {
+                    return formatted;
+                }
+            }
+            
+            // Если нет отформатированного имени, пробуем получить ник с префиксом из Team
+            if (entry.getScoreboardTeam() != null) {
+                Text teamName = entry.getScoreboardTeam().getPrefix();
+                if (teamName != null && !teamName.getString().isEmpty()) {
+                    return teamName.getString() + player.getName().getString();
+                }
+            }
+        }
+        
+        // Запасной вариант: возвращаем обычное имя
+        return player.getDisplayName().getString();
     }
 
     private void drawSpawnerNameTag(DrawContext context) {
@@ -562,104 +596,4 @@ public class NameTags extends Module {
 
     private void renderStatusEffectOverlay(DrawContext context, float x, float y, PlayerEntity player) {
         ArrayList<StatusEffectInstance> effects = new ArrayList<>(player.getStatusEffects());
-        if (effects.isEmpty()) return;
-        x += effects.size() * 12.5f;
-        RenderSystem.enableBlend();
-        RenderSystem.defaultBlendFunc();
-        for (StatusEffectInstance statusEffectInstance : Ordering.natural().reverse().sortedCopy(effects)) {
-            x -= 25;
-            String power = "";
-            switch (statusEffectInstance.getAmplifier()) {
-                case 0 -> power = "I";
-                case 1 -> power = "II";
-                case 2 -> power = "III";
-                case 3 -> power = "IV";
-                case 4 -> power = "V";
-            }
-
-            context.getMatrices().push();
-            context.getMatrices().translate(x, y, 0);
-            context.drawSprite(0, 0, 0, 18, 18, mc.getStatusEffectSpriteManager().getSprite(statusEffectInstance.getEffectType()));
-            FontRenderers.sf_bold_mini.drawCenteredString(context.getMatrices(), PotionHud.getDuration(statusEffectInstance), 9, -8, -1);
-            FontRenderers.categories.drawCenteredString(context.getMatrices(), power, 9, -16, -1);
-            context.getMatrices().pop();
-
-        }
-        RenderSystem.disableBlend();
-    }
-
-    public boolean renderShulkerToolTip(DrawContext context, int offsetX, int offsetY, ItemStack stack) {
-        try {
-            ContainerComponent compoundTag = stack.get(DataComponentTypes.CONTAINER);
-            if (compoundTag == null) return false;
-
-            float[] colors = new float[]{1F, 1F, 1F};
-            Item focusedItem = stack.getItem();
-            if (focusedItem instanceof BlockItem bi && bi.getBlock() instanceof ShulkerBoxBlock) {
-                try {
-                    Color c = new Color(Objects.requireNonNull(ShulkerBoxBlock.getColor(stack.getItem())).getEntityColor());
-                    colors = new float[]{c.getRed() / 255f, c.getGreen() / 255f, c.getRed() / 255f, c.getAlpha() / 255f};
-                } catch (NullPointerException npe) {
-                    colors = new float[]{1F, 1F, 1F};
-                }
-            } else {
-                return false;
-            }
-            draw(context, compoundTag.stream().toList(), offsetX, offsetY, colors);
-        } catch (Exception ignore) {
-            return false;
-        }
-        return true;
-    }
-
-    private void draw(DrawContext context, List<ItemStack> itemStacks, int offsetX, int offsetY, float[] colors) {
-        RenderSystem.disableDepthTest();
-        GL11.glClear(GL11.GL_DEPTH_BUFFER_BIT);
-
-        offsetX += 8;
-        offsetY -= 82;
-
-        drawBackground(context, offsetX, offsetY, colors);
-
-        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-        DiffuseLighting.enableGuiDepthLighting();
-        int row = 0;
-        int i = 0;
-        for (ItemStack itemStack : itemStacks) {
-            context.drawItem(itemStack, offsetX + 8 + i * 18, offsetY + 7 + row * 18);
-            context.drawItemInSlot(mc.textRenderer, itemStack, offsetX + 8 + i * 18, offsetY + 7 + row * 18);
-            i++;
-            if (i >= 9) {
-                i = 0;
-                row++;
-            }
-        }
-        DiffuseLighting.disableGuiDepthLighting();
-        RenderSystem.enableDepthTest();
-    }
-
-    private void drawBackground(DrawContext context, int x, int y, float[] colors) {
-        RenderSystem.disableBlend();
-        RenderSystem.setShaderColor(colors[0], colors[1], colors[2], 1F);
-        RenderSystem.texParameter(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
-        RenderSystem.texParameter(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR_MIPMAP_LINEAR);
-        context.drawTexture(TextureStorage.container, x, y, 0, 0, 176, 67, 176, 67);
-        RenderSystem.enableBlend();
-    }
-
-    public enum Font {
-        Fancy, Fast
-    }
-
-    public enum Armor {
-        None, Full, Durability
-    }
-
-    public enum Health {
-        Number, Hearts, Dots
-    }
-
-    private enum OutlineColor {
-        Sync, Custom, None, New
-    }
-}
+        if (effects.isEmpty()) return
