@@ -38,6 +38,7 @@ public class Clicker extends Module {
     @Override
     public void onEnable() {
         timer.reset();
+        lastTarget = null;
     }
 
     @EventHandler
@@ -52,7 +53,10 @@ public class Clicker extends Module {
         if (fullNullCheck()) return;
 
         BlockPos target = findNearestContainer();
-        if (target == null) return;
+        if (target == null) {
+            lastTarget = null;
+            return;
+        }
 
         if (!timer.passedMs(delay.getValue())) return;
 
@@ -76,7 +80,7 @@ public class Clicker extends Module {
     @Override
     public void onRender3D(net.minecraft.client.util.math.MatrixStack stack) {
         if (!render.getValue() || lastTarget == null) return;
-        Render3DEngine.drawBlockOutline(stack, lastTarget, Color.GREEN, 2.0f);
+        Render3DEngine.drawBlockBox(lastTarget, Color.GREEN, 2.0f, true);
     }
 
     private BlockPos findNearestContainer() {
