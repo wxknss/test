@@ -9,7 +9,7 @@ import net.minecraft.network.packet.s2c.play.PlayerListS2CPacket;
 import net.minecraft.network.packet.s2c.play.PlayerRemoveS2CPacket;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
-import net.minecraft.text.Text;
+import net.minecraft.text.*;
 import net.minecraft.util.Formatting;
 import org.jetbrains.annotations.NotNull;
 import thunder.hack.core.Managers;
@@ -31,6 +31,7 @@ public class ChatUtils extends Module {
     private final Setting<Prefix> prefix = new Setting<>("Prefix", Prefix.None);
     private final Setting<Boolean> totems = new Setting<>("Totems", false);
     private final Setting<Boolean> time = new Setting<>("Time", false);
+    private final Setting<Boolean> copyButton = new Setting<>("CopyButton", false);
     private final Setting<Boolean> mention = new Setting<>("Mention", false);
     private final Setting<PMSound> pmSound = new Setting<>("PMSound", PMSound.Default);
     private final Setting<Boolean> zov = new Setting<>("ZOV", false);
@@ -177,19 +178,36 @@ public class ChatUtils extends Module {
             }
         }
         if (event.getPacket() instanceof GameMessageS2CPacket pac) {
+            IGameMessageS2CPacket pac2 = event.getPacket();
+            Text messageContent = pac.content();
+            
+            // Добавляем время
             if (time.getValue()) {
-                IGameMessageS2CPacket pac2 = event.getPacket();
-                pac2.setContent(Text.of("[" + Formatting.GRAY + new SimpleDateFormat("HH:mm:ss").format(Calendar.getInstance().getTime()) + Formatting.RESET + "] ").copy().append(pac.content));
+                Text timeText = Text.literal("[" + Formatting.GRAY + new SimpleDateFormat("HH:mm:ss").format(Calendar.getInstance().getTime()) + Formatting.RESET + "] ");
+                messageContent = timeText.copy().append(messageContent);
             }
+            
+            // Добавляем кнопку копирования
+            if (copyButton.getValue()) {
+                Text copyButtonText = Text.literal(" ❤️ ")
+                    .setStyle(Style.EMPTY
+                        .withColor(Formatting.DARK_AQUA)
+                        .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, messageContent.getString()))
+                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("Copy to clipboard")))
+                    );
+                messageContent = Text.empty().append(messageContent).append(copyButtonText);
+            }
+            
+            pac2.setContent(messageContent);
 
             if (mention.getValue()) {
-                if (pac.content.getString().contains(mc.player.getName().getString()) && messageTimer.passedMs(1000)) {
+                if (pac.content().getString().contains(mc.player.getName().getString()) && messageTimer.passedMs(1000)) {
                     Managers.NOTIFICATION.publicity("ChatUtils", isRu() ? "Тебя помянули в чате!" : "You were mentioned in the chat!", 4, Notification.Type.WARNING);
                     mc.world.playSound(mc.player, mc.player.getBlockPos(), SoundEvents.ENTITY_PLAYER_LEVELUP, SoundCategory.BLOCKS, 5f, 1f);
                 }
             }
 
-            String content = pac.content.getString().toLowerCase();
+            String content = pac.content().getString().toLowerCase();
             if (!pmSound.is(PMSound.Off) && (content.contains("whisper") || content.contains("-> я") || content.contains("-> " + NameProtect.getCustomName()) || content.contains("-> me") || content.contains(" says:"))) {
                 Managers.SOUND.playPmSound(pmSound.getValue());
             }
@@ -229,7 +247,7 @@ public class ChatUtils extends Module {
     @EventHandler
     public void onPacketSend(PacketEvent.@NotNull Send e) {
         if (e.getPacket() instanceof ChatMessageC2SPacket pac) {
-            if (antiCoordLeak.getValue() && pac.chatMessage.replaceAll("\\D", "").length() >= 6) {
+            if (antiCoordLeak.getValue() && pac.chatMessage().replaceAll("\\D", "").length() >= 6) {
                 sendMessage("[ChatUtils] " + (isRu() ? "В сообщении содержатся координаты!" : "The message contains coordinates!"));
                 e.cancel();
             }
