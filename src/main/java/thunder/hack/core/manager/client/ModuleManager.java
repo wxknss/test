@@ -147,6 +147,7 @@ public class ModuleManager implements IManager {
     public static PotionHud potionHud = new PotionHud();
     public static PearlBait pearlBait = new PearlBait();
     public static AutoBuy autoBuy = new AutoBuy();
+    public static Clicker clicker = new Clicker();
     public static PacketFly packetFly = new PacketFly();
     public static MultiTask multitask = new MultiTask();
     public static LegacyHud legacyHud = new LegacyHud();
