@@ -18,9 +18,6 @@ import thunder.hack.events.impl.PacketEvent;
 import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
 import thunder.hack.utility.Timer;
-import thunder.hack.utility.render.Render3DEngine;
-
-import java.awt.Color;
 
 public class Clicker extends Module {
     public Clicker() {
@@ -30,7 +27,6 @@ public class Clicker extends Module {
     private final Setting<Integer> delay = new Setting<>("Delay", 50, 10, 500);
     private final Setting<Boolean> rotate = new Setting<>("Rotate", true);
     private final Setting<Boolean> cancelGui = new Setting<>("CancelGUI", true);
-    private final Setting<Boolean> render = new Setting<>("Render", true);
 
     private final Timer timer = new Timer();
     private BlockPos lastTarget = null;
@@ -75,12 +71,6 @@ public class Clicker extends Module {
         sendSequencedPacket(id -> new PlayerInteractBlockC2SPacket(Hand.MAIN_HAND, hit, id));
         lastTarget = target;
         timer.reset();
-    }
-
-    @Override
-    public void onRender3D(net.minecraft.client.util.math.MatrixStack stack) {
-        if (!render.getValue() || lastTarget == null) return;
-        Render3DEngine.drawBlockBox(lastTarget, Color.GREEN, 2.0f, true);
     }
 
     private BlockPos findNearestContainer() {
