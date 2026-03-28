@@ -31,9 +31,10 @@ public class ChatUtils extends Module {
     private final Setting<Prefix> prefix = new Setting<>("Prefix", Prefix.None);
     private final Setting<Boolean> totems = new Setting<>("Totems", false);
     private final Setting<Boolean> time = new Setting<>("Time", false);
-    private final Setting<Boolean> copyButton = new Setting<>("CopyButton", false);
+    private final Setting<CopyButton> copyButton = new Setting<>("CopyButton", CopyButton.Off);
     private final Setting<Boolean> mention = new Setting<>("Mention", false);
     private final Setting<PMSound> pmSound = new Setting<>("PMSound", PMSound.Default);
+    private final Setting<Boolean> antiBwFilter = new Setting<>("AntiBWFilter", false);
     private final Setting<Boolean> zov = new Setting<>("ZOV", false);
     private final Setting<Boolean> wavy = new Setting<>("wAvY", false);
     private final Setting<Boolean> translit = new Setting<>("Translit", false);
@@ -80,6 +81,20 @@ public class ChatUtils extends Module {
             Map.entry("ю", "I-O"),
             Map.entry("я", "9I")
     );
+    
+    Map<String, String> antiBwMap = Map.ofEntries(
+            Map.entry("х", "x"),
+            Map.entry("Х", "X"),
+            Map.entry("у", "y"),
+            Map.entry("У", "Y"),
+            Map.entry("p", "р"),
+            Map.entry("P", "Р"),
+            Map.entry("з", "3"),
+            Map.entry("З", "3"),
+            Map.entry("пизд", "пuзд"),
+            Map.entry("Пизд", "Пuзд"),
+            Map.entry("ПИЗД", "ПuЗД")
+    );
 
     private final String[] bb = new String[]{
             "See you later, ",
@@ -119,9 +134,12 @@ public class ChatUtils extends Module {
             " cringelord popped <pop> times so ez "
     };
 
-
     public ChatUtils() {
         super("ChatUtils", Category.MISC);
+    }
+
+    public enum CopyButton {
+        Off, Heart, Star, Arrow
     }
 
     @Override
@@ -188,12 +206,24 @@ public class ChatUtils extends Module {
             }
             
             // Добавляем кнопку копирования
-            if (copyButton.getValue()) {
-                Text copyButtonText = Text.literal(" ❤️ ")
+            if (copyButton.getValue() != CopyButton.Off && !isSystemMessage(messageContent.getString())) {
+                String buttonSymbol = switch (copyButton.getValue()) {
+                    case Heart -> "❤️";
+                    case Star -> "✨";
+                    case Arrow -> "➤";
+                    default -> "❤️";
+                };
+                
+                String plainText = messageContent.getString().replaceAll("§[0-9a-fk-or]", "");
+                Formatting color = Formatting.DARK_AQUA;
+                
+                Text copyButtonText = Text.literal(" " + buttonSymbol + " ")
                     .setStyle(Style.EMPTY
-                        .withColor(Formatting.DARK_AQUA)
-                        .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, messageContent.getString()))
-                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("Copy to clipboard")))
+                        .withColor(color)
+                        .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, plainText))
+                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, 
+                            Text.literal("§k" + "m" + "§r").setStyle(Style.EMPTY.withColor(color))
+                        ))
                     );
                 messageContent = Text.empty().append(messageContent).append(copyButtonText);
             }
@@ -212,6 +242,14 @@ public class ChatUtils extends Module {
                 Managers.SOUND.playPmSound(pmSound.getValue());
             }
         }
+    }
+
+    private boolean isSystemMessage(String message) {
+        if (message.isEmpty()) return true;
+        if (message.contains("joined the game") || message.contains("left the game")) return true;
+        if (message.contains("was slain") || message.contains("achievement")) return true;
+        if (message.startsWith("§") && message.length() < 10) return true;
+        return false;
     }
 
     @EventHandler
@@ -243,6 +281,14 @@ public class ChatUtils extends Module {
         }
         return false;
     }
+    
+    private String applyAntiBwFilter(String message) {
+        String result = message;
+        for (Map.Entry<String, String> entry : antiBwMap.entrySet()) {
+            result = result.replace(entry.getKey(), entry.getValue());
+        }
+        return result;
+    }
 
     @EventHandler
     public void onPacketSend(PacketEvent.@NotNull Send e) {
@@ -256,7 +302,7 @@ public class ChatUtils extends Module {
         }
 
         if (fullNullCheck()) return;
-        if (e.getPacket() instanceof ChatMessageC2SPacket pac && (zov.getValue() || wavy.getValue() || translit.getValue())) {
+        if (e.getPacket() instanceof ChatMessageC2SPacket pac && (zov.getValue() || wavy.getValue() || translit.getValue() || antiBwFilter.getValue())) {
 
             if (Objects.equals(pac.chatMessage(), skip)) {
                 return;
@@ -269,6 +315,11 @@ public class ChatUtils extends Module {
                 return;
 
             String message = pac.chatMessage();
+            
+            if (antiBwFilter.getValue()) {
+                message = applyAntiBwFilter(message);
+            }
+            
             if (zov.getValue()) {
                 StringBuilder builder = new StringBuilder();
                 for (char Z : message.toCharArray()) {
