@@ -5,6 +5,7 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.math.Vec3d;
+import thunder.hack.core.Managers;
 import thunder.hack.events.impl.EventMove;
 import thunder.hack.events.impl.PlayerUpdateEvent;
 import thunder.hack.features.modules.Module;
@@ -102,7 +103,10 @@ public class TPAura extends Module {
         if (entity == mc.player) return false;
         if (!(entity instanceof LivingEntity)) return false;
         if (!entity.isAlive()) return false;
-        if (entity instanceof PlayerEntity player && (player.isCreative() || Managers.FRIEND.isFriend(player))) return false;
+        if (entity instanceof PlayerEntity player) {
+            if (player.isCreative()) return false;
+            if (Managers.FRIEND.isFriend(player)) return false;
+        }
         if (mc.player.distanceTo(entity) > range.getValue()) return false;
         return true;
     }
