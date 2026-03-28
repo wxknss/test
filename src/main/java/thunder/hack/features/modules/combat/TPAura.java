@@ -4,6 +4,7 @@ import meteordevelopment.orbit.EventHandler;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
 import net.minecraft.util.math.Vec3d;
 import thunder.hack.core.Managers;
 import thunder.hack.events.impl.EventMove;
@@ -27,7 +28,6 @@ public class TPAura extends Module {
     private final Setting<Integer> cps = new Setting<>("CPS", 10, 1, 20);
     private final Setting<Boolean> rotate = new Setting<>("Rotate", true);
     private final Setting<Integer> rotateRandomness = new Setting<>("RotateRandomness", 5, 0, 20, v -> rotate.getValue());
-    private final Setting<Integer> teleportDelay = new Setting<>("TeleportDelay", 1, 0, 5);
 
     private final Timer attackTimer = new Timer();
     private final Timer teleportTimer = new Timer();
@@ -35,16 +35,12 @@ public class TPAura extends Module {
     private Vec3d originalPos;
     private int teleportTicks = 0;
     private boolean teleporting = false;
-    private float lastYaw;
-    private float lastPitch;
 
     @Override
     public void onEnable() {
         target = null;
         teleporting = false;
         teleportTicks = 0;
-        lastYaw = mc.player.getYaw();
-        lastPitch = mc.player.getPitch();
     }
 
     @EventHandler
@@ -60,7 +56,7 @@ public class TPAura extends Module {
             return;
         }
 
-        if (!teleporting && teleportTimer.passedMs(teleportDelay.getValue() * 50L)) {
+        if (!teleporting && teleportTimer.passedMs(50)) {
             startTeleport();
         }
 
@@ -120,7 +116,7 @@ public class TPAura extends Module {
         if (teleportPos == null) return;
 
         mc.player.setPosition(teleportPos.x, teleportPos.y, teleportPos.z);
-        sendPacket(new net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket.PositionAndOnGround(teleportPos.x, teleportPos.y, teleportPos.z, false));
+        sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(teleportPos.x, teleportPos.y, teleportPos.z, false));
 
         teleporting = true;
         teleportTicks = 2;
@@ -159,13 +155,10 @@ public class TPAura extends Module {
             float randomYawOffset = MathUtility.random(-rotateRandomness.getValue(), rotateRandomness.getValue());
             float randomPitchOffset = MathUtility.random(-rotateRandomness.getValue() / 2, rotateRandomness.getValue() / 2);
             
-            lastYaw = rotations[0] + randomYawOffset;
-            lastPitch = rotations[1] + randomPitchOffset;
+            float targetYaw = rotations[0] + randomYawOffset;
+            float targetPitch = rotations[1] + randomPitchOffset;
             
-            mc.player.setYaw(lastYaw);
-            mc.player.setPitch(lastPitch);
-            
-            sendPacket(new net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket.LookAndOnGround(lastYaw, lastPitch, mc.player.isOnGround()));
+            sendPacket(new PlayerMoveC2SPacket.LookAndOnGround(targetYaw, targetPitch, mc.player.isOnGround()));
         }
 
         mc.interactionManager.attackEntity(mc.player, target);
@@ -177,16 +170,11 @@ public class TPAura extends Module {
         if (originalPos == null) return;
 
         mc.player.setPosition(originalPos.x, originalPos.y, originalPos.z);
-        sendPacket(new net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket.PositionAndOnGround(originalPos.x, originalPos.y, originalPos.z, false));
+        sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(originalPos.x, originalPos.y, originalPos.z, false));
         
-        if (rotate.getValue()) {
-            mc.player.setYaw(lastYaw);
-            mc.player.setPitch(lastPitch);
-            sendPacket(new net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket.LookAndOnGround(lastYaw, lastPitch, mc.player.isOnGround()));
-        }
-
         teleporting = false;
         teleportTicks = 0;
+        originalPos = null;
     }
 
     private float[] getRotations(Entity target) {
