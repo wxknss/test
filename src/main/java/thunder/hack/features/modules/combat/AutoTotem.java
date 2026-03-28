@@ -67,7 +67,7 @@ public final class AutoTotem extends Module {
     public final Setting<RCGap> rcGap = new Setting<>("RightClickGapple", RCGap.Off);
     private final Setting<Boolean> crappleSpoof = new Setting<>("CrappleSpoof", true, v -> offhand.getValue() == OffHand.GApple);
     
-    // ===== НОВЫЕ УМНЫЕ РЕЖИМЫ =====
+    // НОВЫЕ УМНЫЕ РЕЖИМЫ
     private final Setting<Integer> retryDelay = new Setting<>("RetryDelay", 50, 10, 200);
     private final Setting<Integer> freeSlot = new Setting<>("FreeSlot", 8, 0, 8);
     private final Setting<Boolean> keepFreeSlot = new Setting<>("KeepFreeSlot", true);
@@ -88,7 +88,6 @@ public final class AutoTotem extends Module {
     private Timer bindDelay = new Timer();
     private Timer retryTimer = new Timer();
     private Item prevItem;
-    private boolean wasAttacking = false;
     private int lastSlot = -1;
 
     public AutoTotem() {
@@ -267,17 +266,17 @@ public final class AutoTotem extends Module {
                     case Default -> {
                         if (ncpStrict.getValue())
                             sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.STOP_SPRINTING));
-                        clickSlot(slot);
-                        clickSlot(45);
-                        clickSlot(slot);
+                        clickSlotMethod(slot);
+                        clickSlotMethod(45);
+                        clickSlotMethod(slot);
                         sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
                     }
                     case Alternative -> {
                         if (ncpStrict.getValue())
                             sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.STOP_SPRINTING));
-                        clickSlot(slot, nearestSlot, SlotActionType.SWAP);
-                        clickSlot(45, nearestSlot, SlotActionType.SWAP);
-                        clickSlot(slot, nearestSlot, SlotActionType.SWAP);
+                        clickSlotMethod(slot, nearestSlot, SlotActionType.SWAP);
+                        clickSlotMethod(45, nearestSlot, SlotActionType.SWAP);
+                        clickSlotMethod(slot, nearestSlot, SlotActionType.SWAP);
                         sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
                     }
                     case Matrix -> {
@@ -285,7 +284,7 @@ public final class AutoTotem extends Module {
                             sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.STOP_SPRINTING));
 
                         mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot, nearestSlot, SlotActionType.SWAP, mc.player);
-                        debug(slot + " " + nearestSlot);
+                        sendMessage("§7[AutoTotem] " + slot + " " + nearestSlot);
 
                         sendPacket(new UpdateSelectedSlotC2SPacket(nearestSlot));
                         mc.player.getInventory().selectedSlot = nearestSlot;
@@ -305,14 +304,14 @@ public final class AutoTotem extends Module {
                             mc.player.resetLastAttackedTicks();
                     }
                     case MatrixPick -> {
-                        debug(slot + " pick");
+                        sendMessage("§7[AutoTotem] " + slot + " pick");
                         sendPacket(new PickFromInventoryC2SPacket(slot));
                         sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
                         int prevSlot = mc.player.getInventory().selectedSlot;
                         Managers.ASYNC.run(() -> mc.player.getInventory().selectedSlot = prevSlot, 300);
                     }
                     case NewVersion -> {
-                        debug(slot + " swap");
+                        sendMessage("§7[AutoTotem] " + slot + " swap");
                         mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot, 40, SlotActionType.SWAP, mc.player);
                         sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
                     }
@@ -320,7 +319,7 @@ public final class AutoTotem extends Module {
             } else {
                 sendPacket(new UpdateSelectedSlotC2SPacket(slot));
                 mc.player.getInventory().selectedSlot = slot;
-                debug(slot + " select");
+                sendMessage("§7[AutoTotem] " + slot + " select");
                 sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
                 sendPacket(new UpdateSelectedSlotC2SPacket(prevCurrentItem));
                 mc.player.getInventory().selectedSlot = prevCurrentItem;
@@ -332,11 +331,11 @@ public final class AutoTotem extends Module {
         }
     }
     
-    private void clickSlot(int slot) {
+    private void clickSlotMethod(int slot) {
         mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot, 0, SlotActionType.PICKUP, mc.player);
     }
     
-    private void clickSlot(int slot, int button, SlotActionType action) {
+    private void clickSlotMethod(int slot, int button, SlotActionType action) {
         mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot, button, action, mc.player);
     }
 
@@ -561,9 +560,9 @@ public final class AutoTotem extends Module {
         return ModuleManager.blink.isEnabled() ? Blink.lastPos : mc.player.getPos();
     }
     
-    private void debug(String msg) {
-        if (mc.player != null && placeMode.is(PlaceMode.Aggressive)) {
-            mc.player.sendMessage(net.minecraft.text.Text.literal("§7[AutoTotem] §f" + msg), false);
+    private void sendMessage(String msg) {
+        if (mc.player != null) {
+            mc.player.sendMessage(net.minecraft.text.Text.literal(msg), false);
         }
     }
 }
