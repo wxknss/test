@@ -148,6 +148,7 @@ public class ModuleManager implements IManager {
     public static PearlBait pearlBait = new PearlBait();
     public static AutoBuy autoBuy = new AutoBuy();
     public static Clicker clicker = new Clicker();
+    public static TPAura tpAura = new TPAura();
     public static PacketFly packetFly = new PacketFly();
     public static MultiTask multitask = new MultiTask();
     public static LegacyHud legacyHud = new LegacyHud();
