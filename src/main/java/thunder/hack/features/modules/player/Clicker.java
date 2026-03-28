@@ -1,89 +1,105 @@
-package thunder.hack.features.modules.player;
+package thunder.hack.features.modules.combat;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.ChestBlock;
-import net.minecraft.block.ShulkerBoxBlock;
-import net.minecraft.block.TrappedChestBlock;
-import net.minecraft.client.util.InputUtil;
-import net.minecraft.network.packet.c2s.play.PlayerInteractBlockC2SPacket;
-import net.minecraft.text.Text;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
+import meteordevelopment.orbit.EventHandler;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.math.Vec3d;
+import thunder.hack.core.Managers;
+import thunder.hack.events.impl.EventMove;
+import thunder.hack.events.impl.PlayerUpdateEvent;
 import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
 import thunder.hack.utility.Timer;
+import thunder.hack.utility.math.MathUtility;
 
-public class Clicker extends Module {
-    public Clicker() {
-        super("Clicker", Category.PLAYER);
+import java.util.Comparator;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+public class TPAura extends Module {
+    public TPAura() {
+        super("TPAura", Category.COMBAT);
     }
 
-    private final Setting<Integer> cps = new Setting<>("CPS", 1000, 1, 5000);
-    private final Setting<Boolean> onlyContainers = new Setting<>("OnlyContainers", true);
-    private final Setting<Boolean> blockGui = new Setting<>("BlockGUI", true);
+    private final Setting<Float> range = new Setting<>("Range", 50f, 1f, 100f);
+    private final Setting<Float> hitRange = new Setting<>("HitRange", 3.5f, 1f, 6f);
+    private final Setting<Integer> cps = new Setting<>("CPS", 10, 1, 20);
+    private final Setting<Boolean> rotate = new Setting<>("Rotate", true);
+    private final Setting<Integer> rotateRandomness = new Setting<>("RotateRandomness", 5, 0, 20, v -> rotate.getValue());
+    private final Setting<Integer> teleportDelay = new Setting<>("TeleportDelay", 1, 0, 5);
 
-    private final Timer timer = new Timer();
-    private boolean clicking = false;
+    private final Timer attackTimer = new Timer();
+    private final Timer teleportTimer = new Timer();
+    private Entity target;
+    private Vec3d originalPos;
+    private int teleportTicks = 0;
+    private boolean teleporting = false;
+    private float lastYaw;
+    private float lastPitch;
 
     @Override
     public void onEnable() {
-        clicking = true;
-        timer.reset();
-        displayMessage("§aClicker started §7(CPS: " + cps.getValue() + ")");
+        target = null;
+        teleporting = false;
+        teleportTicks = 0;
+        lastYaw = mc.player.getYaw();
+        lastPitch = mc.player.getPitch();
     }
 
-    @Override
-    public void onDisable() {
-        clicking = false;
-        displayMessage("§cClicker stopped");
-    }
+    @EventHandler
+    public void onUpdate(PlayerUpdateEvent e) {
+        if (fullNullCheck()) return;
 
-    @Override
-    public void onUpdate() {
-        if (!clicking || fullNullCheck()) return;
+        updateTarget();
 
-        if (blockGui.getValue() && mc.currentScreen != null) {
+        if (target == null) {
+            if (teleporting) {
+                returnToOriginal();
+            }
             return;
         }
 
-        if (onlyContainers.getValue() && !isLookingAtContainer()) {
-            return;
+        if (!teleporting && teleportTimer.passedMs(teleportDelay.getValue() * 50L)) {
+            startTeleport();
         }
 
-        long delay = 1000 / cps.getValue();
-        if (!timer.passedMs(delay)) return;
-
-        clickPacket();
-        timer.reset();
-    }
-
-    private boolean isLookingAtContainer() {
-        if (mc.crosshairTarget instanceof BlockHitResult hit) {
-            BlockPos pos = hit.getBlockPos();
-            Block block = mc.world.getBlockState(pos).getBlock();
-            return block instanceof ChestBlock || 
-                   block instanceof TrappedChestBlock || 
-                   block instanceof ShulkerBoxBlock;
+        if (teleporting && teleportTicks > 0) {
+            teleportTicks--;
+            if (teleportTicks <= 0) {
+                attack();
+                returnToOriginal();
+            }
         }
-        return false;
-    }
 
-    private void clickPacket() {
-        if (!(mc.crosshairTarget instanceof BlockHitResult hit)) return;
-        
-        // Отправляем пакет взаимодействия с блоком
-        sendPacket(new PlayerInteractBlockC2SPacket(Hand.MAIN_HAND, hit));
-        
-        // Имитируем swing руки (для визуала)
-        mc.player.swingHand(Hand.MAIN_HAND);
-    }
-
-    private void displayMessage(String msg) {
-        if (mc.player != null) {
-            mc.player.sendMessage(Text.literal(msg), false);
+        if (attackTimer.passedMs(1000 / cps.getValue()) && !teleporting) {
+            attack();
         }
     }
-}
+
+    @EventHandler
+    public void onMove(EventMove e) {
+        if (teleporting) {
+            e.setX(0);
+            e.setZ(0);
+            e.cancel();
+        }
+    }
+
+    private void updateTarget() {
+        List<Entity> entities = new CopyOnWriteArrayList<>();
+        for (Entity entity : mc.world.getEntities()) {
+            if (isValidTarget(entity)) {
+                entities.add(entity);
+            }
+        }
+
+        target = entities.stream()
+                .min(Comparator.comparingDouble(e -> mc.player.squaredDistanceTo(e)))
+                .orElse(null);
+    }
+
+    private boolean isValidTarget(Entity entity) {
+        if (entity == mc.player) return false;
+        if (!(entity instanceof LivingEntity)) return false;
+        if (!entity.isAlive()) return false;
