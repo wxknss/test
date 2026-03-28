@@ -41,6 +41,7 @@ import thunder.hack.utility.player.SearchInvResult;
 
 public final class AutoTotem extends Module {
     private final Setting<Mode> mode = new Setting<>("Mode", Mode.Matrix);
+    private final Setting<PlaceMode> placeMode = new Setting<>("PlaceMode", PlaceMode.Smart);
     private final Setting<OffHand> offhand = new Setting<>("Item", OffHand.Totem);
     private final Setting<BooleanSettingGroup> bindSwap = new Setting<>("BindSwap", new BooleanSettingGroup(false), v -> offhand.is(OffHand.Totem));
     private final Setting<Bind> swapButton = new Setting<>("SwapButton", new Bind(GLFW.GLFW_KEY_CAPS_LOCK, false, false)).addToGroup(bindSwap);
@@ -65,21 +66,30 @@ public final class AutoTotem extends Module {
     private final Setting<Boolean> onTnt = new Setting<>("OnTNT", true).addToGroup(safety);
     public final Setting<RCGap> rcGap = new Setting<>("RightClickGapple", RCGap.Off);
     private final Setting<Boolean> crappleSpoof = new Setting<>("CrappleSpoof", true, v -> offhand.getValue() == OffHand.GApple);
+    
+    // ===== НОВЫЕ УМНЫЕ РЕЖИМЫ =====
+    private final Setting<Integer> retryDelay = new Setting<>("RetryDelay", 50, 10, 200);
+    private final Setting<Integer> freeSlot = new Setting<>("FreeSlot", 8, 0, 8);
+    private final Setting<Boolean> keepFreeSlot = new Setting<>("KeepFreeSlot", true);
+    private final Setting<Boolean> silentSwap = new Setting<>("SilentSwap", true);
+    private final Setting<Boolean> offhandOnly = new Setting<>("OffhandOnly", false);
+    private final Setting<Boolean> fallbackToHotbar = new Setting<>("FallbackToHotbar", true);
+    private final Setting<Boolean> matrixInstant = new Setting<>("MatrixInstant", true);
+    private final Setting<Integer> matrixDelay = new Setting<>("MatrixDelay", 1, 0, 10, v -> matrixInstant.getValue());
 
     private enum OffHand {Totem, Crystal, GApple, Shield}
-
     private enum Mode {Default, Alternative, Matrix, MatrixPick, NewVersion}
-
+    private enum PlaceMode {Normal, Smart, Aggressive, MatrixOptimized, Silent, Instant}
     private enum Swap {GappleShield, BallShield, GappleBall, BallTotem}
-
     public enum RCGap {Off, Always, OnlySafe}
 
-
     private int delay;
-
+    private int matrixRetry = 0;
     private Timer bindDelay = new Timer();
-
+    private Timer retryTimer = new Timer();
     private Item prevItem;
+    private boolean wasAttacking = false;
+    private int lastSlot = -1;
 
     public AutoTotem() {
         super("AutoTotem", Category.COMBAT);
@@ -87,74 +97,171 @@ public final class AutoTotem extends Module {
 
     @EventHandler
     public void onSync(EventSync e) {
-        swapTo(getItemSlot());
+        if (matrixInstant.getValue() && placeMode.is(PlaceMode.MatrixOptimized)) {
+            matrixRetry++;
+            if (matrixRetry < matrixDelay.getValue()) {
+                return;
+            }
+            matrixRetry = 0;
+        }
+        
+        if (keepFreeSlot.getValue()) {
+            reserveFreeSlot();
+        }
+        
+        int slot = getItemSlot();
+        
+        if (slot != -1 && placeMode.is(PlaceMode.Aggressive)) {
+            swapToAggressive(slot);
+        } else if (slot != -1 && placeMode.is(PlaceMode.Silent)) {
+            swapToSilent(slot);
+        } else if (slot != -1 && placeMode.is(PlaceMode.Instant)) {
+            swapToInstant(slot);
+        } else if (slot != -1 && placeMode.is(PlaceMode.MatrixOptimized)) {
+            swapToMatrixOptimized(slot);
+        } else {
+            swapTo(slot);
+        }
 
         if (rcGap.not(RCGap.Off) && (mc.player.getMainHandStack().getItem() instanceof SwordItem) && mc.options.useKey.isPressed() && !mc.player.isUsingItem())
             ((IMinecraftClient) mc).idoItemUse();
 
         delay--;
     }
-
-    @EventHandler
-    public void onPacketReceive(PacketEvent.@NotNull Receive e) {
-        if (e.getPacket() instanceof EntitySpawnS2CPacket spawn)
-            if (spawn.getEntityType() == EntityType.END_CRYSTAL)
-                if (getPlayerPos().squaredDistanceTo(spawn.getX(), spawn.getY(), spawn.getZ()) < 36) {
-                    if (hotbarFallBack.getValue()) {
-                        if (fallBackCalc.getValue() && ExplosionUtility.getExplosionDamageWPredict(new Vec3d(spawn.getX(), spawn.getY(), spawn.getZ()), mc.player, PredictUtility.createBox(getPlayerPos(), mc.player), false) < getTriggerHealth() + 4f)
-                            return;
-                        runInstant();
-                    }
-
-                    if (onCrystal.getValue()) {
-                        if (getTriggerHealth() - ExplosionUtility.getExplosionDamageWPredict(new Vec3d(spawn.getX(), spawn.getY(), spawn.getZ()), mc.player, PredictUtility.createBox(getPlayerPos(), mc.player), false) < 0.5) {
-                            int slot = -1;
-                            for (int i = 9; i < 45; i++) {
-                                if (mc.player.getInventory().getStack(i >= 36 ? i - 36 : i).getItem().equals(Items.TOTEM_OF_UNDYING)) {
-                                    slot = i >= 36 ? i - 36 : i;
-                                    break;
-                                }
-                            }
-
-                            swapTo(slot);
-                            debug("spawn switch");
-                        }
-                    }
+    
+    private void reserveFreeSlot() {
+        int currentSlot = mc.player.getInventory().selectedSlot;
+        if (currentSlot != freeSlot.getValue()) {
+            ItemStack stack = mc.player.getInventory().getStack(freeSlot.getValue());
+            if (stack.isEmpty() || stack.getItem() == Items.AIR) {
+                return;
+            }
+            for (int i = 0; i < 9; i++) {
+                if (i != freeSlot.getValue() && mc.player.getInventory().getStack(i).isEmpty()) {
+                    swapSlots(i, freeSlot.getValue());
+                    break;
                 }
-
-
-        if (e.getPacket() instanceof BlockUpdateS2CPacket blockUpdate)
-            if (blockUpdate.getState().getBlock() == Blocks.OBSIDIAN && onObsidianPlace.getValue())
-                if (getPlayerPos().squaredDistanceTo(blockUpdate.getPos().toCenterPos()) < 36 && delay <= 0)
-                    runInstant();
+            }
+        }
     }
-
-    private float getTriggerHealth() {
-        return mc.player.getHealth() + (calcAbsorption.getValue() ? mc.player.getAbsorptionAmount() : 0f);
+    
+    private void swapSlots(int from, int to) {
+        mc.interactionManager.clickSlot(
+            mc.player.currentScreenHandler.syncId,
+            from < 9 ? from + 36 : from,
+            to < 9 ? to + 36 : to,
+            SlotActionType.SWAP,
+            mc.player
+        );
+        sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
     }
-
-    private void runInstant() {
-        SearchInvResult hotbarResult = InventoryUtility.findItemInHotBar(Items.TOTEM_OF_UNDYING);
-        SearchInvResult invResult = InventoryUtility.findItemInInventory(Items.TOTEM_OF_UNDYING);
-        if (hotbarResult.found()) {
-            hotbarResult.switchTo();
-            delay = 20;
-        } else if (invResult.found()) {
-            int slot = invResult.slot() >= 36 ? invResult.slot() - 36 : invResult.slot();
-            if (!hotbarFallBack.getValue()) swapTo(slot);
-            else mc.interactionManager.pickFromInventory(slot);
-            delay = 20;
+    
+    private void swapToAggressive(int slot) {
+        if (slot != -1 && delay <= 0 && retryTimer.passedMs(retryDelay.getValue())) {
+            if (mc.currentScreen instanceof GenericContainerScreen) return;
+            
+            int prevSlot = mc.player.getInventory().selectedSlot;
+            
+            if (slot >= 9) {
+                for (int i = 0; i < 3; i++) {
+                    mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot, prevSlot, SlotActionType.SWAP, mc.player);
+                    sendPacket(new UpdateSelectedSlotC2SPacket(prevSlot));
+                    mc.player.getInventory().selectedSlot = prevSlot;
+                    sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
+                }
+            } else {
+                sendPacket(new UpdateSelectedSlotC2SPacket(slot));
+                mc.player.getInventory().selectedSlot = slot;
+                sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
+                sendPacket(new UpdateSelectedSlotC2SPacket(prevSlot));
+                mc.player.getInventory().selectedSlot = prevSlot;
+            }
+            
+            retryTimer.reset();
+            delay = 2;
+        }
+    }
+    
+    private void swapToSilent(int slot) {
+        if (slot != -1 && delay <= 0) {
+            if (mc.currentScreen instanceof GenericContainerScreen) return;
+            
+            int prevSlot = mc.player.getInventory().selectedSlot;
+            
+            if (slot >= 9) {
+                mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot, prevSlot, SlotActionType.SWAP, mc.player);
+            } else {
+                sendPacket(new UpdateSelectedSlotC2SPacket(slot));
+                mc.player.getInventory().selectedSlot = slot;
+                sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
+                sendPacket(new UpdateSelectedSlotC2SPacket(prevSlot));
+                mc.player.getInventory().selectedSlot = prevSlot;
+            }
+            
+            sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
+            delay = 1;
+        }
+    }
+    
+    private void swapToInstant(int slot) {
+        if (slot != -1 && delay <= 0) {
+            if (mc.currentScreen instanceof GenericContainerScreen) return;
+            
+            if (slot >= 9) {
+                sendPacket(new PickFromInventoryC2SPacket(slot));
+                sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
+            } else {
+                sendPacket(new UpdateSelectedSlotC2SPacket(slot));
+                sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
+                sendPacket(new UpdateSelectedSlotC2SPacket(mc.player.getInventory().selectedSlot));
+            }
+            
+            delay = 0;
+        }
+    }
+    
+    private void swapToMatrixOptimized(int slot) {
+        if (slot != -1 && delay <= 0) {
+            if (mc.currentScreen instanceof GenericContainerScreen) return;
+            
+            int prevSlot = mc.player.getInventory().selectedSlot;
+            int nearestSlot = findNearestCurrentItem();
+            
+            if (slot >= 9) {
+                mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot, nearestSlot, SlotActionType.SWAP, mc.player);
+                sendPacket(new UpdateSelectedSlotC2SPacket(nearestSlot));
+                mc.player.getInventory().selectedSlot = nearestSlot;
+                
+                ItemStack itemstack = mc.player.getOffHandStack();
+                mc.player.setStackInHand(Hand.OFF_HAND, mc.player.getMainHandStack());
+                mc.player.setStackInHand(Hand.MAIN_HAND, itemstack);
+                sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
+                
+                sendPacket(new UpdateSelectedSlotC2SPacket(prevSlot));
+                mc.player.getInventory().selectedSlot = prevSlot;
+                mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot, nearestSlot, SlotActionType.SWAP, mc.player);
+            } else {
+                sendPacket(new UpdateSelectedSlotC2SPacket(slot));
+                mc.player.getInventory().selectedSlot = slot;
+                sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
+                sendPacket(new UpdateSelectedSlotC2SPacket(prevSlot));
+                mc.player.getInventory().selectedSlot = prevSlot;
+            }
+            
+            sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
+            delay = 1;
         }
     }
 
     public void swapTo(int slot) {
-        if (slot != -1 && delay <= 0) {
+        if (slot != -1 && delay <= 0 && retryTimer.passedMs(retryDelay.getValue())) {
             if (mc.currentScreen instanceof GenericContainerScreen) return;
 
             if (stopMotion.getValue()) mc.player.setVelocity(0, mc.player.getVelocity().getY(), 0);
 
             int nearestSlot = findNearestCurrentItem();
             int prevCurrentItem = mc.player.getInventory().selectedSlot;
+            
             if (slot >= 9) {
                 switch (mode.getValue()) {
                     case Default -> {
@@ -220,8 +327,17 @@ public final class AutoTotem extends Module {
                 if (resetAttackCooldown.getValue())
                     mc.player.resetLastAttackedTicks();
             }
+            retryTimer.reset();
             delay = (int) (2 + (Managers.SERVER.getPing() / 25f));
         }
+    }
+    
+    private void clickSlot(int slot) {
+        mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot, 0, SlotActionType.PICKUP, mc.player);
+    }
+    
+    private void clickSlot(int slot, int button, SlotActionType action) {
+        mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot, button, action, mc.player);
     }
 
     public static int findNearestCurrentItem() {
@@ -241,6 +357,7 @@ public final class AutoTotem extends Module {
 
         int itemSlot = -1;
         Item item = null;
+        
         switch (offhand.getValue()) {
             case Totem -> {
                 if (offHandItem != Items.TOTEM_OF_UNDYING && !mc.player.getOffHandStack().isEmpty())
@@ -275,9 +392,7 @@ public final class AutoTotem extends Module {
                         prevItem = item;
                     }
             }
-
             case Crystal -> item = Items.END_CRYSTAL;
-
             case GApple -> {
                 if (crappleSpoof.getValue()) {
                     if (mc.player.hasStatusEffect(StatusEffects.ABSORPTION) && mc.player.getStatusEffect(StatusEffects.ABSORPTION).getAmplifier() > 2) {
@@ -298,7 +413,6 @@ public final class AutoTotem extends Module {
                         item = Items.ENCHANTED_GOLDEN_APPLE;
                 }
             }
-
             case Shield -> {
                 if (shield.found() || offHandItem == Items.SHIELD) {
                     if (getTriggerHealth() <= healthS.getValue()) {
@@ -319,7 +433,6 @@ public final class AutoTotem extends Module {
                     item = Items.GOLDEN_APPLE;
             }
         }
-
 
         if (getTriggerHealth() <= healthF.getValue() && (InventoryUtility.findItemInInventory(Items.TOTEM_OF_UNDYING).found() || offHandItem == Items.TOTEM_OF_UNDYING))
             item = Items.TOTEM_OF_UNDYING;
@@ -400,6 +513,10 @@ public final class AutoTotem extends Module {
                     }
         }
 
+        if (offhandOnly.getValue() && mc.player.getOffHandStack().getItem() == item) {
+            return -1;
+        }
+
         for (int i = 9; i < 45; i++) {
             if (mc.player.getOffHandStack().getItem() == item) return -1;
             if (mc.player.getInventory().getStack(i >= 36 ? i - 36 : i).getItem().equals(item)) {
@@ -408,13 +525,45 @@ public final class AutoTotem extends Module {
             }
         }
 
-        if (item == mc.player.getMainHandStack().getItem() && mc.options.useKey.isPressed()) return -1;
+        if (fallbackToHotbar.getValue() && itemSlot == -1) {
+            for (int i = 0; i < 9; i++) {
+                if (mc.player.getInventory().getStack(i).getItem().equals(item)) {
+                    itemSlot = i;
+                    break;
+                }
+            }
+        }
 
+        if (item == mc.player.getMainHandStack().getItem() && mc.options.useKey.isPressed()) return -1;
 
         return itemSlot;
     }
 
+    private float getTriggerHealth() {
+        return mc.player.getHealth() + (calcAbsorption.getValue() ? mc.player.getAbsorptionAmount() : 0f);
+    }
+
+    private void runInstant() {
+        SearchInvResult hotbarResult = InventoryUtility.findItemInHotBar(Items.TOTEM_OF_UNDYING);
+        SearchInvResult invResult = InventoryUtility.findItemInInventory(Items.TOTEM_OF_UNDYING);
+        if (hotbarResult.found()) {
+            hotbarResult.switchTo();
+            delay = 20;
+        } else if (invResult.found()) {
+            int slot = invResult.slot() >= 36 ? invResult.slot() - 36 : invResult.slot();
+            if (!hotbarFallBack.getValue()) swapTo(slot);
+            else mc.interactionManager.pickFromInventory(slot);
+            delay = 20;
+        }
+    }
+
     private Vec3d getPlayerPos() {
         return ModuleManager.blink.isEnabled() ? Blink.lastPos : mc.player.getPos();
+    }
+    
+    private void debug(String msg) {
+        if (mc.player != null && placeMode.is(PlaceMode.Aggressive)) {
+            mc.player.sendMessage(net.minecraft.text.Text.literal("§7[AutoTotem] §f" + msg), false);
+        }
     }
 }
