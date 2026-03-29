@@ -37,6 +37,7 @@ public class ChatUtils extends Module {
     private final Setting<Boolean> copyButton = new Setting<>("CopyButton", false);
     private final Setting<CopySymbol> copySymbol = new Setting<>("CopySymbol", CopySymbol.Heart, v -> copyButton.getValue());
     private final Setting<CopyColor> copyColor = new Setting<>("CopyColor", CopyColor.Pink, v -> copyButton.getValue());
+    private final Setting<HoverFix> hoverFix = new Setting<>("HoverFix", HoverFix.Fix1, v -> copyButton.getValue());
     private final Setting<Boolean> mention = new Setting<>("Mention", false);
     private final Setting<PMSound> pmSound = new Setting<>("PMSound", PMSound.Default);
     private final Setting<Boolean> antiBwFilter = new Setting<>("AntiBWFilter", false);
@@ -172,6 +173,10 @@ public class ChatUtils extends Module {
         public int getColor() {
             return color;
         }
+    }
+    
+    public enum HoverFix {
+        Fix1, Fix2, Fix3, Fix4, Fix5, Fix6, Fix7, Fix8, Fix9, Fix10
     }
     
     public enum TimeMode {
@@ -346,12 +351,25 @@ public class ChatUtils extends Module {
                 String plainText = messageContent.getString().replaceAll("§[0-9a-fk-or]", "");
                 int color = copyColor.getValue().getColor();
                 
+                String hoverText = switch (hoverFix.getValue()) {
+                    case Fix1 -> "§kfff§r";
+                    case Fix2 -> "§kabc§r";
+                    case Fix3 -> "§k123§r";
+                    case Fix4 -> "§l§kff§r";
+                    case Fix5 -> "§k§oabc§r";
+                    case Fix6 -> "§l§k§oabc§r";
+                    case Fix7 -> "§k§lfff§r";
+                    case Fix8 -> "Copy";
+                    case Fix9 -> "§oCopy§r";
+                    case Fix10 -> "§lCopy§r";
+                };
+                
                 Text copyButtonText = Text.literal(" " + buttonSymbol + " ")
                     .setStyle(Style.EMPTY
                         .withColor(TextColor.fromRgb(color))
                         .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, plainText))
                         .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, 
-                            Text.literal("§kfff§r").setStyle(Style.EMPTY.withColor(TextColor.fromRgb(color)))
+                            Text.literal(hoverText).setStyle(Style.EMPTY.withColor(TextColor.fromRgb(color)))
                         ))
                     );
                 messageContent = Text.empty().append(messageContent).append(copyButtonText);
@@ -415,11 +433,10 @@ public class ChatUtils extends Module {
         result = result.replace("О", "O");
         result = result.replace("пизд", "пuзд");
         result = result.replace("Пизд", "Пuзд");
-        result = result.replace("ПИЗД", "ПuЗД");
-        result = result.replace("ПUЗД", "ПuЗД");
+        result = result.replace("ПИЗД", "ПUЗД");
         result = result.replace("че бате", "чe бaтe");
         result = result.replace("ЧЕ БАТЕ", "ЧE БAТE");
-        result = result.replace("Че Бате", "Чe Бaтe");
+        result = result.replace("Че бате", "Чe бaтe");
         return result;
     }
     
