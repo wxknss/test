@@ -15,9 +15,9 @@ public class MessageAppend extends Module {
         super("MessageAppend", Category.MISC);
     }
 
-    public Setting<Boolean> append_check = new Setting("Append", false);
+    public Setting<Boolean> append_check = new Setting("MessageAppend", false);
     public Setting<String> messageappends = new Setting("AppendText", "");
-    public Setting<Boolean> prefix_check = new Setting("Prefix", false);
+    public Setting<Boolean> prefix_check = new Setting("MessagePrefix", false);
     public Setting<String> messageprefix = new Setting("PrefixText", "");
     public Setting<Boolean> autoGlobal = new Setting("AutoGlobal", false);
 
