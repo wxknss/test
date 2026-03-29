@@ -351,7 +351,7 @@ public class ChatUtils extends Module {
                         .withColor(TextColor.fromRgb(color))
                         .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, plainText))
                         .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, 
-                            Text.literal("Copy").setStyle(Style.EMPTY.withColor(TextColor.fromRgb(color)))
+                            Text.literal("§kfff§r").setStyle(Style.EMPTY.withColor(TextColor.fromRgb(color)))
                         ))
                     );
                 messageContent = Text.empty().append(messageContent).append(copyButtonText);
