@@ -37,7 +37,8 @@ public class ChatUtils extends Module {
     private final Setting<Boolean> copyButton = new Setting<>("CopyButton", false);
     private final Setting<CopySymbol> copySymbol = new Setting<>("CopySymbol", CopySymbol.Heart, v -> copyButton.getValue());
     private final Setting<CopyColor> copyColor = new Setting<>("CopyColor", CopyColor.Pink, v -> copyButton.getValue());
-    private final Setting<HoverFix> hoverFix = new Setting<>("HoverFix", HoverFix.Fix1, v -> copyButton.getValue());
+    private final Setting<HoverTextType> hoverTextType = new Setting<>("HoverTextType", HoverTextType.Default, v -> copyButton.getValue());
+    private final Setting<String> customHoverText = new Setting<>("CustomHoverText", "Copy", v -> copyButton.getValue() && hoverTextType.is(HoverTextType.Custom));
     private final Setting<Boolean> mention = new Setting<>("Mention", false);
     private final Setting<PMSound> pmSound = new Setting<>("PMSound", PMSound.Default);
     private final Setting<Boolean> antiBwFilter = new Setting<>("AntiBWFilter", false);
@@ -175,8 +176,9 @@ public class ChatUtils extends Module {
         }
     }
     
-    public enum HoverFix {
-        Fix1, Fix2, Fix3, Fix4, Fix5, Fix6, Fix7, Fix8, Fix9, Fix10
+    public enum HoverTextType {
+        Default,
+        Custom
     }
     
     public enum TimeMode {
@@ -351,18 +353,12 @@ public class ChatUtils extends Module {
                 String plainText = messageContent.getString().replaceAll("§[0-9a-fk-or]", "");
                 int color = copyColor.getValue().getColor();
                 
-                String hoverText = switch (hoverFix.getValue()) {
-                    case Fix1 -> "§kfff§r";
-                    case Fix2 -> "§kabc§r";
-                    case Fix3 -> "§k123§r";
-                    case Fix4 -> "§l§kff§r";
-                    case Fix5 -> "§k§oabc§r";
-                    case Fix6 -> "§l§k§oabc§r";
-                    case Fix7 -> "§k§lfff§r";
-                    case Fix8 -> "Copy";
-                    case Fix9 -> "§oCopy§r";
-                    case Fix10 -> "§lCopy§r";
-                };
+                String hoverText;
+                if (hoverTextType.getValue() == HoverTextType.Custom) {
+                    hoverText = customHoverText.getValue();
+                } else {
+                    hoverText = "Copy";
+                }
                 
                 Text copyButtonText = Text.literal(" " + buttonSymbol + " ")
                     .setStyle(Style.EMPTY
@@ -436,7 +432,7 @@ public class ChatUtils extends Module {
         result = result.replace("ПИЗД", "ПUЗД");
         result = result.replace("че бате", "чe бaтe");
         result = result.replace("ЧЕ БАТЕ", "ЧE БAТE");
-        result = result.replace("Че бате", "Чe бaтe");
+        result = result.replace("Че бате", "Чe батe");
         return result;
     }
     
