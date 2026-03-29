@@ -13,6 +13,7 @@ import net.minecraft.text.*;
 import net.minecraft.util.Formatting;
 import org.jetbrains.annotations.NotNull;
 import thunder.hack.core.Managers;
+import thunder.hack.core.manager.client.ModuleManager;
 import thunder.hack.events.impl.PacketEvent;
 import thunder.hack.features.modules.Module;
 import thunder.hack.injection.accesors.IGameMessageS2CPacket;
@@ -456,7 +457,7 @@ public class ChatUtils extends Module {
             if (pac.chatMessage().startsWith("/") || pac.chatMessage().startsWith(Managers.COMMAND.getPrefix()))
                 return;
             
-            if (Managers.MODULE.getModule(MessageAppend.class).isEnabled()) {
+            if (ModuleManager.messageAppend.isEnabled()) {
                 return;
             }
 
