@@ -15,10 +15,10 @@ public class MessageAppend extends Module {
         super("MessageAppend", Category.MISC);
     }
 
-    public Setting<Boolean> appendCheck = new Setting("Append", false);
-    public Setting<String> appendText = new Setting("AppendText", "");
-    public Setting<Boolean> prefixCheck = new Setting("Prefix", false);
-    public Setting<String> prefixText = new Setting("PrefixText", "");
+    public Setting<Boolean> append_check = new Setting("Append", false);
+    public Setting<String> messageappends = new Setting("AppendText", "");
+    public Setting<Boolean> prefix_check = new Setting("Prefix", false);
+    public Setting<String> messageprefix = new Setting("PrefixText", "");
     public Setting<Boolean> autoGlobal = new Setting("AutoGlobal", false);
 
     private String skip;
@@ -37,17 +37,17 @@ public class MessageAppend extends Module {
 
         modifiedMessage = pac.chatMessage();
 
-        if (prefixCheck.getValue() && prefixText.getValue() != null && !prefixText.getValue().isEmpty()) {
+        if (prefix_check.getValue() && messageprefix.getValue() != null && !messageprefix.getValue().isEmpty()) {
             if (modifiedMessage.startsWith("!")) {
                 modifiedMessage = modifiedMessage.substring(1);
-                modifiedMessage = "!" + prefixText.getValue() + " " + modifiedMessage;
+                modifiedMessage = "!" + messageprefix.getValue() + " " + modifiedMessage;
             } else {
-                modifiedMessage = prefixText.getValue() + " " + modifiedMessage;
+                modifiedMessage = messageprefix.getValue() + " " + modifiedMessage;
             }
         }
 
-        if (appendCheck.getValue() && appendText.getValue() != null && !appendText.getValue().isEmpty()) {
-            modifiedMessage = modifiedMessage + " " + appendText.getValue();
+        if (append_check.getValue() && messageappends.getValue() != null && !messageappends.getValue().isEmpty()) {
+            modifiedMessage = modifiedMessage + " " + messageappends.getValue();
         }
 
         if (autoGlobal.getValue()) {
