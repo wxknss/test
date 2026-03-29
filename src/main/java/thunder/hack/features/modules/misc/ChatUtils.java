@@ -29,7 +29,10 @@ public class ChatUtils extends Module {
     private final Setting<Welcomer> welcomer = new Setting<>("Welcomer", Welcomer.Off);
     private final Setting<Prefix> prefix = new Setting<>("Prefix", Prefix.None);
     private final Setting<Boolean> time = new Setting<>("Time", false);
+    private final Setting<TimeColor> timeColor = new Setting<>("TimeColor", TimeColor.Gray, v -> time.getValue());
+    private final Setting<BracketColor> bracketColor = new Setting<>("BracketColor", BracketColor.Gray, v -> time.getValue());
     private final Setting<CopyButton> copyButton = new Setting<>("CopyButton", CopyButton.Off);
+    private final Setting<CopySymbol> copySymbol = new Setting<>("CopySymbol", CopySymbol.Heart, v -> copyButton.getValue() != CopyButton.Off);
     private final Setting<CopyColor> copyColor = new Setting<>("CopyColor", CopyColor.Red, v -> copyButton.getValue() != CopyButton.Off);
     private final Setting<Boolean> mention = new Setting<>("Mention", false);
     private final Setting<PMSound> pmSound = new Setting<>("PMSound", PMSound.Default);
@@ -143,14 +146,19 @@ public class ChatUtils extends Module {
     }
 
     public enum CopyButton {
-        Off, Heart, Moon
+        Off, On
+    }
+    
+    public enum CopySymbol {
+        Heart, Sun, Moon
     }
     
     public enum CopyColor {
         Red(0xFF0000),
         Orange(Formatting.GOLD.getColorValue()),
         Yellow(Formatting.YELLOW.getColorValue()),
-        Ocean(Formatting.DARK_AQUA.getColorValue()),
+        Lime(Formatting.GREEN.getColorValue()),
+        Aqua(Formatting.DARK_AQUA.getColorValue()),
         Pink(Formatting.LIGHT_PURPLE.getColorValue()),
         DarkPurple(Formatting.DARK_PURPLE.getColorValue()),
         White(Formatting.WHITE.getColorValue()),
@@ -163,6 +171,48 @@ public class ChatUtils extends Module {
         }
         public int getColor() {
             return color;
+        }
+    }
+    
+    public enum TimeColor {
+        Gray(Formatting.GRAY),
+        Red(Formatting.RED),
+        Orange(Formatting.GOLD),
+        Yellow(Formatting.YELLOW),
+        Lime(Formatting.GREEN),
+        Aqua(Formatting.DARK_AQUA),
+        Pink(Formatting.LIGHT_PURPLE),
+        DarkPurple(Formatting.DARK_PURPLE),
+        White(Formatting.WHITE),
+        Black(Formatting.BLACK);
+        
+        private final Formatting formatting;
+        TimeColor(Formatting formatting) {
+            this.formatting = formatting;
+        }
+        public Formatting getFormatting() {
+            return formatting;
+        }
+    }
+    
+    public enum BracketColor {
+        Gray(Formatting.GRAY),
+        Red(Formatting.RED),
+        Orange(Formatting.GOLD),
+        Yellow(Formatting.YELLOW),
+        Lime(Formatting.GREEN),
+        Aqua(Formatting.DARK_AQUA),
+        Pink(Formatting.LIGHT_PURPLE),
+        DarkPurple(Formatting.DARK_PURPLE),
+        White(Formatting.WHITE),
+        Black(Formatting.BLACK);
+        
+        private final Formatting formatting;
+        BracketColor(Formatting formatting) {
+            this.formatting = formatting;
+        }
+        public Formatting getFormatting() {
+            return formatting;
         }
     }
 
@@ -224,15 +274,17 @@ public class ChatUtils extends Module {
             Text messageContent = pac.content();
             
             if (time.getValue()) {
-                Text timeText = Text.literal("[" + Formatting.GRAY + new SimpleDateFormat("HH:mm:ss").format(Calendar.getInstance().getTime()) + Formatting.RESET + "] ");
+                String bracketColorCode = bracketColor.getValue().getFormatting().toString();
+                String timeColorCode = timeColor.getValue().getFormatting().toString();
+                Text timeText = Text.literal(bracketColorCode + "[" + timeColorCode + new SimpleDateFormat("HH:mm:ss").format(Calendar.getInstance().getTime()) + bracketColorCode + "] ");
                 messageContent = timeText.copy().append(messageContent);
             }
             
-            if (copyButton.getValue() != CopyButton.Off && !isSystemMessage(messageContent.getString())) {
-                String buttonSymbol = switch (copyButton.getValue()) {
+            if (copyButton.getValue() == CopyButton.On && !isSystemMessage(messageContent.getString())) {
+                String buttonSymbol = switch (copySymbol.getValue()) {
                     case Heart -> "❤";
+                    case Sun -> "☀";
                     case Moon -> "🌙";
-                    default -> "❤";
                 };
                 
                 String plainText = messageContent.getString().replaceAll("§[0-9a-fk-or]", "");
