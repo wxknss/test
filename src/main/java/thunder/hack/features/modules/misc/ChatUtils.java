@@ -20,7 +20,6 @@ import thunder.hack.gui.notification.Notification;
 import thunder.hack.setting.Setting;
 import thunder.hack.utility.Timer;
 
-import java.awt.Color;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
@@ -153,7 +152,7 @@ public class ChatUtils extends Module {
     }
     
     public enum CopyColor {
-        Red(new Color(255, 0, 0)),
+        Red(0xFF0000),
         Gold(Formatting.GOLD.getColorValue()),
         Yellow(Formatting.YELLOW.getColorValue()),
         Aqua(Formatting.AQUA.getColorValue()),
@@ -332,10 +331,9 @@ public class ChatUtils extends Module {
     }
     
     private String applyCustomFont(String message) {
-        String result = message;
+        String result = message.toLowerCase();
         for (Map.Entry<String, String> entry : customFontMap.entrySet()) {
             result = result.replace(entry.getKey(), entry.getValue());
-            result = result.replace(entry.getKey().toUpperCase(), entry.getValue().toUpperCase());
         }
         return result;
     }
