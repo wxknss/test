@@ -149,7 +149,7 @@ public class ChatUtils extends Module {
     }
 
     public enum CopySymbol {
-        Heart, Sun, Moon
+        Heart, Sun
     }
     
     public enum CopyColor {
@@ -338,35 +338,20 @@ public class ChatUtils extends Module {
             }
             
             if (copyButton.getValue() && !isSystemMessage(messageContent.getString())) {
-                String buttonSymbol;
-                String buttonText;
-                switch (copySymbol.getValue()) {
-                    case Heart:
-                        buttonSymbol = "❤";
-                        buttonText = buttonSymbol;
-                        break;
-                    case Sun:
-                        buttonSymbol = "☀";
-                        buttonText = buttonSymbol;
-                        break;
-                    case Moon:
-                        buttonSymbol = "☾";
-                        buttonText = "§l" + buttonSymbol + "§r";
-                        break;
-                    default:
-                        buttonSymbol = "❤";
-                        buttonText = buttonSymbol;
-                }
+                String buttonSymbol = switch (copySymbol.getValue()) {
+                    case Heart -> "❤";
+                    case Sun -> "☀";
+                };
                 
                 String plainText = messageContent.getString().replaceAll("§[0-9a-fk-or]", "");
                 int color = copyColor.getValue().getColor();
                 
-                Text copyButtonText = Text.literal(" " + buttonText + " ")
+                Text copyButtonText = Text.literal(" " + buttonSymbol + " ")
                     .setStyle(Style.EMPTY
                         .withColor(TextColor.fromRgb(color))
                         .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, plainText))
                         .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, 
-                            Text.literal("§kfff§r").setStyle(Style.EMPTY.withColor(TextColor.fromRgb(color)))
+                            Text.literal("Copy").setStyle(Style.EMPTY.withColor(TextColor.fromRgb(color)))
                         ))
                     );
                 messageContent = Text.empty().append(messageContent).append(copyButtonText);
