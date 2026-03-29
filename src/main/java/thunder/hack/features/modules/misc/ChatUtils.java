@@ -22,7 +22,6 @@ import thunder.hack.utility.Timer;
 
 import java.text.SimpleDateFormat;
 import java.util.*;
-import java.util.concurrent.ConcurrentLinkedQueue;
 
 import static thunder.hack.features.modules.client.ClientSettings.isRu;
 
@@ -33,14 +32,13 @@ public class ChatUtils extends Module {
     private final Setting<TimeMode> timeMode = new Setting<>("TimeMode", TimeMode.Default, v -> time.getValue());
     private final Setting<TimeColor> timeColor = new Setting<>("TimeColor", TimeColor.Gray, v -> time.getValue());
     private final Setting<BracketColor> bracketColor = new Setting<>("BracketColor", BracketColor.White, v -> time.getValue() && timeMode.is(TimeMode.Default));
-    private final Setting<StickColor> stickColor = new Setting<>("StickColor", StickColor.White, v -> time.getValue() && timeMode.is(TimeMode.New));
-    private final Setting<ArrowColor> arrowColor = new Setting<>("ArrowColor", ArrowColor.White, v -> time.getValue() && timeMode.is(TimeMode.New));
+    private final Setting<LeftColor> leftColor = new Setting<>("LeftColor", LeftColor.Yellow, v -> time.getValue() && timeMode.is(TimeMode.New));
+    private final Setting<RightColor> rightColor = new Setting<>("RightColor", RightColor.DarkGray, v -> time.getValue() && timeMode.is(TimeMode.New));
     private final Setting<Boolean> copyButton = new Setting<>("CopyButton", false);
     private final Setting<CopySymbol> copySymbol = new Setting<>("CopySymbol", CopySymbol.Heart, v -> copyButton.getValue());
     private final Setting<CopyColor> copyColor = new Setting<>("CopyColor", CopyColor.Red, v -> copyButton.getValue());
     private final Setting<Boolean> mention = new Setting<>("Mention", false);
     private final Setting<PMSound> pmSound = new Setting<>("PMSound", PMSound.Default);
-    private final Setting<Boolean> keepHistory = new Setting<>("KeepHistory", false);
     private final Setting<Boolean> antiBwFilter = new Setting<>("AntiBWFilter", false);
     private final Setting<Boolean> customFont = new Setting<>("CustomFont", false);
     private final Setting<Boolean> zov = new Setting<>("ZOV", false);
@@ -52,7 +50,6 @@ public class ChatUtils extends Module {
     private final Timer antiSpam = new Timer();
     private final Timer messageTimer = new Timer();
     private final LinkedHashMap<UUID, String> nameMap = new LinkedHashMap<>();
-    private final ConcurrentLinkedQueue<Text> chatHistory = new ConcurrentLinkedQueue<>();
     private String skip;
 
     Map<String, String> ruToEng = Map.ofEntries(
@@ -151,10 +148,6 @@ public class ChatUtils extends Module {
         super("ChatUtils", Category.MISC);
     }
 
-    public enum CopyButton {
-        Off, On
-    }
-    
     public enum CopySymbol {
         Heart, Sun, Moon
     }
@@ -169,6 +162,7 @@ public class ChatUtils extends Module {
         DarkPurple(Formatting.DARK_PURPLE.getColorValue()),
         White(Formatting.WHITE.getColorValue()),
         Gray(Formatting.GRAY.getColorValue()),
+        DarkGray(Formatting.DARK_GRAY.getColorValue()),
         Black(Formatting.BLACK.getColorValue());
         
         private final int color;
@@ -194,6 +188,7 @@ public class ChatUtils extends Module {
         Pink(Formatting.LIGHT_PURPLE),
         DarkPurple(Formatting.DARK_PURPLE),
         White(Formatting.WHITE),
+        DarkGray(Formatting.DARK_GRAY),
         Black(Formatting.BLACK);
         
         private final Formatting formatting;
@@ -215,6 +210,7 @@ public class ChatUtils extends Module {
         Aqua(Formatting.DARK_AQUA),
         Pink(Formatting.LIGHT_PURPLE),
         DarkPurple(Formatting.DARK_PURPLE),
+        DarkGray(Formatting.DARK_GRAY),
         Black(Formatting.BLACK);
         
         private final Formatting formatting;
@@ -226,20 +222,21 @@ public class ChatUtils extends Module {
         }
     }
     
-    public enum StickColor {
+    public enum LeftColor {
+        Yellow(Formatting.YELLOW),
         White(Formatting.WHITE),
         Gray(Formatting.GRAY),
         Red(Formatting.RED),
         Orange(Formatting.GOLD),
-        Yellow(Formatting.YELLOW),
         Green(Formatting.GREEN),
         Aqua(Formatting.DARK_AQUA),
         Pink(Formatting.LIGHT_PURPLE),
         DarkPurple(Formatting.DARK_PURPLE),
+        DarkGray(Formatting.DARK_GRAY),
         Black(Formatting.BLACK);
         
         private final Formatting formatting;
-        StickColor(Formatting formatting) {
+        LeftColor(Formatting formatting) {
             this.formatting = formatting;
         }
         public Formatting getFormatting() {
@@ -247,7 +244,8 @@ public class ChatUtils extends Module {
         }
     }
     
-    public enum ArrowColor {
+    public enum RightColor {
+        DarkGray(Formatting.DARK_GRAY),
         White(Formatting.WHITE),
         Gray(Formatting.GRAY),
         Red(Formatting.RED),
@@ -260,7 +258,7 @@ public class ChatUtils extends Module {
         Black(Formatting.BLACK);
         
         private final Formatting formatting;
-        ArrowColor(Formatting formatting) {
+        RightColor(Formatting formatting) {
             this.formatting = formatting;
         }
         public Formatting getFormatting() {
@@ -283,16 +281,6 @@ public class ChatUtils extends Module {
             }
             timer.reset();
         }
-    }
-
-    @Override
-    public void onLogin() {
-        if (keepHistory.getValue() && !chatHistory.isEmpty()) {
-            for (Text msg : chatHistory) {
-                mc.inGameHud.getChatHud().addMessage(msg);
-            }
-        }
-        chatHistory.clear();
     }
 
     @EventHandler
@@ -334,7 +322,6 @@ public class ChatUtils extends Module {
         if (event.getPacket() instanceof GameMessageS2CPacket pac) {
             IGameMessageS2CPacket pac2 = event.getPacket();
             Text messageContent = pac.content();
-            Text originalMessage = messageContent;
             
             if (time.getValue()) {
                 String timeStr = new SimpleDateFormat("HH:mm:ss").format(Calendar.getInstance().getTime());
@@ -344,9 +331,9 @@ public class ChatUtils extends Module {
                     String timeColorCode = timeColor.getValue().getFormatting().toString();
                     messageContent = Text.literal(bracketColorCode + "[" + timeColorCode + timeStr + bracketColorCode + "] ").copy().append(messageContent);
                 } else {
-                    String stickColorCode = stickColor.getValue().getFormatting().toString();
-                    String arrowColorCode = arrowColor.getValue().getFormatting().toString();
-                    messageContent = Text.literal(stickColorCode + "| " + timeColor.getValue().getFormatting() + timeStr + " " + arrowColorCode + "» ").copy().append(messageContent);
+                    String leftColorCode = leftColor.getValue().getFormatting().toString();
+                    String rightColorCode = rightColor.getValue().getFormatting().toString();
+                    messageContent = Text.literal(leftColorCode + "| " + timeColor.getValue().getFormatting() + timeStr + " " + rightColorCode + "» ").copy().append(messageContent);
                 }
             }
             
@@ -369,13 +356,6 @@ public class ChatUtils extends Module {
                         ))
                     );
                 messageContent = Text.empty().append(messageContent).append(copyButtonText);
-            }
-            
-            if (keepHistory.getValue()) {
-                chatHistory.add(originalMessage);
-                if (chatHistory.size() > 100) {
-                    chatHistory.poll();
-                }
             }
             
             pac2.setContent(messageContent);
