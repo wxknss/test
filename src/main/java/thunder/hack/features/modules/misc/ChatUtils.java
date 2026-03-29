@@ -37,8 +37,6 @@ public class ChatUtils extends Module {
     private final Setting<Boolean> copyButton = new Setting<>("CopyButton", false);
     private final Setting<CopySymbol> copySymbol = new Setting<>("CopySymbol", CopySymbol.Heart, v -> copyButton.getValue());
     private final Setting<CopyColor> copyColor = new Setting<>("CopyColor", CopyColor.Pink, v -> copyButton.getValue());
-    private final Setting<HoverTextType> hoverTextType = new Setting<>("HoverTextType", HoverTextType.Default, v -> copyButton.getValue());
-    private final Setting<String> customHoverText = new Setting<>("CustomHoverText", "Copy", v -> copyButton.getValue() && hoverTextType.is(HoverTextType.Custom));
     private final Setting<Boolean> mention = new Setting<>("Mention", false);
     private final Setting<PMSound> pmSound = new Setting<>("PMSound", PMSound.Default);
     private final Setting<Boolean> antiBwFilter = new Setting<>("AntiBWFilter", false);
@@ -174,11 +172,6 @@ public class ChatUtils extends Module {
         public int getColor() {
             return color;
         }
-    }
-    
-    public enum HoverTextType {
-        Default,
-        Custom
     }
     
     public enum TimeMode {
@@ -353,12 +346,7 @@ public class ChatUtils extends Module {
                 String plainText = messageContent.getString().replaceAll("§[0-9a-fk-or]", "");
                 int color = copyColor.getValue().getColor();
                 
-                String hoverText;
-                if (hoverTextType.getValue() == HoverTextType.Custom) {
-                    hoverText = customHoverText.getValue();
-                } else {
-                    hoverText = "Copy";
-                }
+                String hoverText = buttonSymbol;
                 
                 Text copyButtonText = Text.literal(" " + buttonSymbol + " ")
                     .setStyle(Style.EMPTY
