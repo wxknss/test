@@ -14,7 +14,6 @@ import net.minecraft.util.Formatting;
 import org.jetbrains.annotations.NotNull;
 import thunder.hack.core.Managers;
 import thunder.hack.events.impl.PacketEvent;
-import thunder.hack.events.impl.TotemPopEvent;
 import thunder.hack.features.modules.Module;
 import thunder.hack.injection.accesors.IGameMessageS2CPacket;
 import thunder.hack.gui.notification.Notification;
@@ -29,9 +28,9 @@ import static thunder.hack.features.modules.client.ClientSettings.isRu;
 public class ChatUtils extends Module {
     private final Setting<Welcomer> welcomer = new Setting<>("Welcomer", Welcomer.Off);
     private final Setting<Prefix> prefix = new Setting<>("Prefix", Prefix.None);
-    private final Setting<Boolean> totems = new Setting<>("Totems", false);
     private final Setting<Boolean> time = new Setting<>("Time", false);
     private final Setting<CopyButton> copyButton = new Setting<>("CopyButton", CopyButton.Off);
+    private final Setting<CopyColor> copyColor = new Setting<>("CopyColor", CopyColor.Red, v -> copyButton.getValue() != CopyButton.Off);
     private final Setting<Boolean> mention = new Setting<>("Mention", false);
     private final Setting<PMSound> pmSound = new Setting<>("PMSound", PMSound.Default);
     private final Setting<Boolean> antiBwFilter = new Setting<>("AntiBWFilter", false);
@@ -81,20 +80,6 @@ public class ChatUtils extends Module {
             Map.entry("ю", "I-O"),
             Map.entry("я", "9I")
     );
-    
-    Map<String, String> antiBwMap = Map.ofEntries(
-            Map.entry("х", "x"),
-            Map.entry("Х", "X"),
-            Map.entry("у", "y"),
-            Map.entry("У", "Y"),
-            Map.entry("p", "р"),
-            Map.entry("P", "Р"),
-            Map.entry("з", "3"),
-            Map.entry("З", "3"),
-            Map.entry("пизд", "пuзд"),
-            Map.entry("Пизд", "Пuзд"),
-            Map.entry("ПИЗД", "ПuЗД")
-    );
 
     private final String[] bb = new String[]{
             "See you later, ",
@@ -116,30 +101,33 @@ public class ChatUtils extends Module {
             "Welcome to SERVERIP1D5A9E, "
     };
 
-    private final String[] popMessages = new String[]{
-            " EZZZ POP <pop> TIMES PIECE OF SHIT GET GOOD",
-            " ez pop <pop> times fuckin unbrain",
-            " pop <pop> times get good kiddo ",
-            " EZZZZZZZ pop <pop> times GO LEARN PVP PUSSY",
-            " piece of shit popped <pop> times so ez",
-            " easiest pop <pop> times in my life",
-            " HAHAHAHA BRO POPPED <pop> TIMES SO EZ LMAO",
-            " POP <pop> TIMES OMG MAN UR SO BAD LMAO",
-            " my grandma has more skill than you nigga pop <pop> times",
-            " trash pop <pop> times retard ",
-            " ezz no skill dog pop <pop> times",
-            " lame dude tryes to pvp with me but dyes) hahah pop <pop> times",
-            " get better tbh bruh pop <pop> times",
-            " pop <pop> times ur eyes don't work right? ",
-            " cringelord popped <pop> times so ez "
-    };
-
     public ChatUtils() {
         super("ChatUtils", Category.MISC);
     }
 
     public enum CopyButton {
-        Off, Heart, Star, Arrow
+        Off, Heart, Sun, Moon, Stars
+    }
+    
+    public enum CopyColor {
+        Red(Formatting.RED),
+        Gold(Formatting.GOLD),
+        Yellow(Formatting.YELLOW),
+        Green(Formatting.GREEN),
+        Aqua(Formatting.AQUA),
+        Blue(Formatting.BLUE),
+        LightPurple(Formatting.LIGHT_PURPLE),
+        DarkPurple(Formatting.DARK_PURPLE),
+        Rainbow(null),
+        CustomRed(Formatting.RED);
+        
+        private final Formatting formatting;
+        CopyColor(Formatting formatting) {
+            this.formatting = formatting;
+        }
+        public Formatting getFormatting() {
+            return formatting;
+        }
     }
 
     @Override
@@ -199,30 +187,32 @@ public class ChatUtils extends Module {
             IGameMessageS2CPacket pac2 = event.getPacket();
             Text messageContent = pac.content();
             
-            // Добавляем время
             if (time.getValue()) {
                 Text timeText = Text.literal("[" + Formatting.GRAY + new SimpleDateFormat("HH:mm:ss").format(Calendar.getInstance().getTime()) + Formatting.RESET + "] ");
                 messageContent = timeText.copy().append(messageContent);
             }
             
-            // Добавляем кнопку копирования
             if (copyButton.getValue() != CopyButton.Off && !isSystemMessage(messageContent.getString())) {
                 String buttonSymbol = switch (copyButton.getValue()) {
                     case Heart -> "❤️";
-                    case Star -> "✨";
-                    case Arrow -> "➤";
+                    case Sun -> "☀️";
+                    case Moon -> "🌙";
+                    case Stars -> "✨";
                     default -> "❤️";
                 };
                 
                 String plainText = messageContent.getString().replaceAll("§[0-9a-fk-or]", "");
-                Formatting color = Formatting.DARK_AQUA;
+                Formatting color = copyColor.getValue().getFormatting();
+                if (color == null && copyColor.getValue() == CopyColor.Rainbow) {
+                    color = Formatting.RED;
+                }
                 
                 Text copyButtonText = Text.literal(" " + buttonSymbol + " ")
                     .setStyle(Style.EMPTY
                         .withColor(color)
                         .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, plainText))
                         .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, 
-                            Text.literal("§k" + "m" + "§r").setStyle(Style.EMPTY.withColor(color))
+                            Text.literal("§k" + "mmm" + "§r").setStyle(Style.EMPTY.withColor(color))
                         ))
                     );
                 messageContent = Text.empty().append(messageContent).append(copyButtonText);
@@ -252,16 +242,6 @@ public class ChatUtils extends Module {
         return false;
     }
 
-    @EventHandler
-    public void onTotem(TotemPopEvent e) {
-        if (totems.getValue() && antiSpam.passedMs(3000) && e.getEntity() != mc.player) {
-            int n = (int) Math.floor(Math.random() * popMessages.length);
-            String s = popMessages[n].replace("<pop>", e.getPops() + "");
-            mc.player.networkHandler.sendChatMessage(getPrefix() + e.getEntity().getName().getString() + s);
-            antiSpam.reset();
-        }
-    }
-
     private @NotNull String getPrefix() {
         return switch (prefix.getValue()) {
             case Green -> ">";
@@ -284,9 +264,20 @@ public class ChatUtils extends Module {
     
     private String applyAntiBwFilter(String message) {
         String result = message;
-        for (Map.Entry<String, String> entry : antiBwMap.entrySet()) {
-            result = result.replace(entry.getKey(), entry.getValue());
-        }
+        result = result.replace("х", "x");
+        result = result.replace("Х", "X");
+        result = result.replace("у", "y");
+        result = result.replace("У", "Y");
+        result = result.replace("е", "e");
+        result = result.replace("Е", "E");
+        result = result.replace("а", "a");
+        result = result.replace("А", "A");
+        result = result.replace("о", "o");
+        result = result.replace("О", "O");
+        result = result.replace("пизд", "пuзд");
+        result = result.replace("Пизд", "Пuзд");
+        result = result.replace("ПИЗД", "ПuЗД");
+        result = result.replace("ПUЗД", "ПuЗД");
         return result;
     }
 
