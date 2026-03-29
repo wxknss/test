@@ -338,16 +338,30 @@ public class ChatUtils extends Module {
             }
             
             if (copyButton.getValue() && !isSystemMessage(messageContent.getString())) {
-                String buttonSymbol = switch (copySymbol.getValue()) {
-                    case Heart -> "❤";
-                    case Sun -> "☀";
-                    case Moon -> "☾";
-                };
+                String buttonSymbol;
+                String buttonText;
+                switch (copySymbol.getValue()) {
+                    case Heart:
+                        buttonSymbol = "❤";
+                        buttonText = buttonSymbol;
+                        break;
+                    case Sun:
+                        buttonSymbol = "☀";
+                        buttonText = buttonSymbol;
+                        break;
+                    case Moon:
+                        buttonSymbol = "☾";
+                        buttonText = "§l" + buttonSymbol + "§r";
+                        break;
+                    default:
+                        buttonSymbol = "❤";
+                        buttonText = buttonSymbol;
+                }
                 
                 String plainText = messageContent.getString().replaceAll("§[0-9a-fk-or]", "");
                 int color = copyColor.getValue().getColor();
                 
-                Text copyButtonText = Text.literal(" " + buttonSymbol + " ")
+                Text copyButtonText = Text.literal(" " + buttonText + " ")
                     .setStyle(Style.EMPTY
                         .withColor(TextColor.fromRgb(color))
                         .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, plainText))
