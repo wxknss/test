@@ -30,7 +30,6 @@ public class ChatUtils extends Module {
     private final Setting<Prefix> prefix = new Setting<>("Prefix", Prefix.None);
     private final Setting<Boolean> time = new Setting<>("Time", false);
     private final Setting<CopyButton> copyButton = new Setting<>("CopyButton", CopyButton.Off);
-    private final Setting<CopyFix> copyFix = new Setting<>("CopyFix", CopyFix.Fix1, v -> copyButton.getValue() != CopyButton.Off);
     private final Setting<CopyColor> copyColor = new Setting<>("CopyColor", CopyColor.Red, v -> copyButton.getValue() != CopyButton.Off);
     private final Setting<Boolean> mention = new Setting<>("Mention", false);
     private final Setting<PMSound> pmSound = new Setting<>("PMSound", PMSound.Default);
@@ -144,18 +143,14 @@ public class ChatUtils extends Module {
     }
 
     public enum CopyButton {
-        Off, Heart, Sun, Moon, Stars
-    }
-    
-    public enum CopyFix {
-        Fix1, Fix2, Fix3, Fix4, Fix5
+        Off, Heart, Moon
     }
     
     public enum CopyColor {
         Red(0xFF0000),
-        Gold(Formatting.GOLD.getColorValue()),
+        Orange(Formatting.GOLD.getColorValue()),
         Yellow(Formatting.YELLOW.getColorValue()),
-        Aqua(Formatting.AQUA.getColorValue()),
+        Ocean(Formatting.DARK_AQUA.getColorValue()),
         Pink(Formatting.LIGHT_PURPLE.getColorValue()),
         DarkPurple(Formatting.DARK_PURPLE.getColorValue()),
         White(Formatting.WHITE.getColorValue()),
@@ -236,29 +231,19 @@ public class ChatUtils extends Module {
             if (copyButton.getValue() != CopyButton.Off && !isSystemMessage(messageContent.getString())) {
                 String buttonSymbol = switch (copyButton.getValue()) {
                     case Heart -> "❤";
-                    case Sun -> "☀";
-                    case Moon -> "☾";
-                    case Stars -> "★";
+                    case Moon -> "🌙";
                     default -> "❤";
                 };
                 
                 String plainText = messageContent.getString().replaceAll("§[0-9a-fk-or]", "");
                 int color = copyColor.getValue().getColor();
                 
-                String hoverText = switch (copyFix.getValue()) {
-                    case Fix1 -> "§kmmm§r";
-                    case Fix2 -> "§kmm§r";
-                    case Fix3 -> "§km§r";
-                    case Fix4 -> "§kmmmm§r";
-                    case Fix5 -> "§kmmmmm§r";
-                };
-                
                 Text copyButtonText = Text.literal(" " + buttonSymbol + " ")
                     .setStyle(Style.EMPTY
                         .withColor(TextColor.fromRgb(color))
                         .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, plainText))
                         .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, 
-                            Text.literal(hoverText).setStyle(Style.EMPTY.withColor(TextColor.fromRgb(color)))
+                            Text.literal("§kmmm§r").setStyle(Style.EMPTY.withColor(TextColor.fromRgb(color)))
                         ))
                     );
                 messageContent = Text.empty().append(messageContent).append(copyButtonText);
