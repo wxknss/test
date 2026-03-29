@@ -20,6 +20,7 @@ import thunder.hack.gui.notification.Notification;
 import thunder.hack.setting.Setting;
 import thunder.hack.utility.Timer;
 
+import java.awt.Color;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
@@ -30,10 +31,12 @@ public class ChatUtils extends Module {
     private final Setting<Prefix> prefix = new Setting<>("Prefix", Prefix.None);
     private final Setting<Boolean> time = new Setting<>("Time", false);
     private final Setting<CopyButton> copyButton = new Setting<>("CopyButton", CopyButton.Off);
+    private final Setting<CopyFix> copyFix = new Setting<>("CopyFix", CopyFix.Fix1, v -> copyButton.getValue() != CopyButton.Off);
     private final Setting<CopyColor> copyColor = new Setting<>("CopyColor", CopyColor.Red, v -> copyButton.getValue() != CopyButton.Off);
     private final Setting<Boolean> mention = new Setting<>("Mention", false);
     private final Setting<PMSound> pmSound = new Setting<>("PMSound", PMSound.Default);
     private final Setting<Boolean> antiBwFilter = new Setting<>("AntiBWFilter", false);
+    private final Setting<Boolean> customFont = new Setting<>("CustomFont", false);
     private final Setting<Boolean> zov = new Setting<>("ZOV", false);
     private final Setting<Boolean> wavy = new Setting<>("wAvY", false);
     private final Setting<Boolean> translit = new Setting<>("Translit", false);
@@ -80,6 +83,42 @@ public class ChatUtils extends Module {
             Map.entry("ю", "I-O"),
             Map.entry("я", "9I")
     );
+    
+    Map<String, String> customFontMap = Map.ofEntries(
+            Map.entry("а", "ᴀ"),
+            Map.entry("б", "б"),
+            Map.entry("в", "в"),
+            Map.entry("г", "ᴦ"),
+            Map.entry("д", "д"),
+            Map.entry("е", "ᴇ"),
+            Map.entry("ё", "ё"),
+            Map.entry("ж", "ж"),
+            Map.entry("з", "з"),
+            Map.entry("и", "ᴎ"),
+            Map.entry("й", "й"),
+            Map.entry("к", "ᴋ"),
+            Map.entry("л", "ᴫ"),
+            Map.entry("м", "ᴍ"),
+            Map.entry("н", "н"),
+            Map.entry("о", "ᴏ"),
+            Map.entry("п", "ᴨ"),
+            Map.entry("р", "ᴩ"),
+            Map.entry("с", "ᴄ"),
+            Map.entry("т", "ᴛ"),
+            Map.entry("у", "у"),
+            Map.entry("ф", "ф"),
+            Map.entry("х", "ⅹ"),
+            Map.entry("ц", "ц"),
+            Map.entry("ч", "ч"),
+            Map.entry("ш", "ш"),
+            Map.entry("щ", "щ"),
+            Map.entry("ъ", "ъ"),
+            Map.entry("ы", "ы"),
+            Map.entry("ь", "ь"),
+            Map.entry("э", "э"),
+            Map.entry("ю", "ю"),
+            Map.entry("я", "ᴙ")
+    );
 
     private final String[] bb = new String[]{
             "See you later, ",
@@ -109,24 +148,27 @@ public class ChatUtils extends Module {
         Off, Heart, Sun, Moon, Stars
     }
     
+    public enum CopyFix {
+        Fix1, Fix2, Fix3, Fix4, Fix5
+    }
+    
     public enum CopyColor {
-        Red(Formatting.RED),
-        Gold(Formatting.GOLD),
-        Yellow(Formatting.YELLOW),
-        Green(Formatting.GREEN),
-        Aqua(Formatting.AQUA),
-        Blue(Formatting.BLUE),
-        LightPurple(Formatting.LIGHT_PURPLE),
-        DarkPurple(Formatting.DARK_PURPLE),
-        Rainbow(null),
-        CustomRed(Formatting.RED);
+        Red(new Color(255, 0, 0)),
+        Gold(Formatting.GOLD.getColorValue()),
+        Yellow(Formatting.YELLOW.getColorValue()),
+        Aqua(Formatting.AQUA.getColorValue()),
+        Pink(Formatting.LIGHT_PURPLE.getColorValue()),
+        DarkPurple(Formatting.DARK_PURPLE.getColorValue()),
+        White(Formatting.WHITE.getColorValue()),
+        Gray(Formatting.GRAY.getColorValue()),
+        Black(Formatting.BLACK.getColorValue());
         
-        private final Formatting formatting;
-        CopyColor(Formatting formatting) {
-            this.formatting = formatting;
+        private final int color;
+        CopyColor(int color) {
+            this.color = color;
         }
-        public Formatting getFormatting() {
-            return formatting;
+        public int getColor() {
+            return color;
         }
     }
 
@@ -194,25 +236,30 @@ public class ChatUtils extends Module {
             
             if (copyButton.getValue() != CopyButton.Off && !isSystemMessage(messageContent.getString())) {
                 String buttonSymbol = switch (copyButton.getValue()) {
-                    case Heart -> "❤️";
-                    case Sun -> "☀️";
-                    case Moon -> "🌙";
-                    case Stars -> "✨";
-                    default -> "❤️";
+                    case Heart -> "❤";
+                    case Sun -> "☀";
+                    case Moon -> "☾";
+                    case Stars -> "★";
+                    default -> "❤";
                 };
                 
                 String plainText = messageContent.getString().replaceAll("§[0-9a-fk-or]", "");
-                Formatting color = copyColor.getValue().getFormatting();
-                if (color == null && copyColor.getValue() == CopyColor.Rainbow) {
-                    color = Formatting.RED;
-                }
+                int color = copyColor.getValue().getColor();
+                
+                String hoverText = switch (copyFix.getValue()) {
+                    case Fix1 -> "§kmmm§r";
+                    case Fix2 -> "§kmm§r";
+                    case Fix3 -> "§km§r";
+                    case Fix4 -> "§kmmmm§r";
+                    case Fix5 -> "§kmmmmm§r";
+                };
                 
                 Text copyButtonText = Text.literal(" " + buttonSymbol + " ")
                     .setStyle(Style.EMPTY
-                        .withColor(color)
+                        .withColor(TextColor.fromRgb(color))
                         .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, plainText))
                         .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, 
-                            Text.literal("§k" + "mmm" + "§r").setStyle(Style.EMPTY.withColor(color))
+                            Text.literal(hoverText).setStyle(Style.EMPTY.withColor(TextColor.fromRgb(color)))
                         ))
                     );
                 messageContent = Text.empty().append(messageContent).append(copyButtonText);
@@ -278,6 +325,18 @@ public class ChatUtils extends Module {
         result = result.replace("Пизд", "Пuзд");
         result = result.replace("ПИЗД", "ПuЗД");
         result = result.replace("ПUЗД", "ПuЗД");
+        result = result.replace("че бате", "чe бaтe");
+        result = result.replace("ЧЕ БАТЕ", "ЧE БAТE");
+        result = result.replace("Че Бате", "Чe Бaтe");
+        return result;
+    }
+    
+    private String applyCustomFont(String message) {
+        String result = message;
+        for (Map.Entry<String, String> entry : customFontMap.entrySet()) {
+            result = result.replace(entry.getKey(), entry.getValue());
+            result = result.replace(entry.getKey().toUpperCase(), entry.getValue().toUpperCase());
+        }
         return result;
     }
 
@@ -293,7 +352,7 @@ public class ChatUtils extends Module {
         }
 
         if (fullNullCheck()) return;
-        if (e.getPacket() instanceof ChatMessageC2SPacket pac && (zov.getValue() || wavy.getValue() || translit.getValue() || antiBwFilter.getValue())) {
+        if (e.getPacket() instanceof ChatMessageC2SPacket pac && (zov.getValue() || wavy.getValue() || translit.getValue() || antiBwFilter.getValue() || customFont.getValue())) {
 
             if (Objects.equals(pac.chatMessage(), skip)) {
                 return;
@@ -307,38 +366,41 @@ public class ChatUtils extends Module {
 
             String message = pac.chatMessage();
             
-            if (antiBwFilter.getValue()) {
-                message = applyAntiBwFilter(message);
-            }
-            
-            if (zov.getValue()) {
-                StringBuilder builder = new StringBuilder();
-                for (char Z : message.toCharArray()) {
-                    if ('З' == Z || 'з' == Z) {
-                        builder.append("Z");
-                    } else if ('В' == Z || 'в' == Z) {
-                        builder.append("V");
-                    } else {
-                        builder.append(Z);
-                    }
+            if (customFont.getValue()) {
+                message = applyCustomFont(message);
+            } else {
+                if (antiBwFilter.getValue()) {
+                    message = applyAntiBwFilter(message);
                 }
-                message = builder.toString();
-            }
-            if (wavy.getValue()) {
-                StringBuilder builder = new StringBuilder();
-                boolean up = false;
-                for (char C : message.toCharArray()) {
-                    if (up) {
-                        builder.append(Character.toUpperCase(C));
-                    } else {
-                        builder.append(Character.toLowerCase(C));
+                if (zov.getValue()) {
+                    StringBuilder builder = new StringBuilder();
+                    for (char Z : message.toCharArray()) {
+                        if ('З' == Z || 'з' == Z) {
+                            builder.append("Z");
+                        } else if ('В' == Z || 'в' == Z) {
+                            builder.append("V");
+                        } else {
+                            builder.append(Z);
+                        }
                     }
-                    up = Character.isLetter(C) != up;
+                    message = builder.toString();
                 }
-                message = builder.toString();
+                if (wavy.getValue()) {
+                    StringBuilder builder = new StringBuilder();
+                    boolean up = false;
+                    for (char C : message.toCharArray()) {
+                        if (up) {
+                            builder.append(Character.toUpperCase(C));
+                        } else {
+                            builder.append(Character.toLowerCase(C));
+                        }
+                        up = Character.isLetter(C) != up;
+                    }
+                    message = builder.toString();
+                }
+                if (translit.getValue())
+                    message = transliterate(message);
             }
-            if (translit.getValue())
-                message = transliterate(message);
             skip = message;
             mc.player.networkHandler.sendChatMessage(skip);
             e.cancel();
