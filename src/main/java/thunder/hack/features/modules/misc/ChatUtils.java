@@ -455,6 +455,10 @@ public class ChatUtils extends Module {
 
             if (pac.chatMessage().startsWith("/") || pac.chatMessage().startsWith(Managers.COMMAND.getPrefix()))
                 return;
+            
+            if (Managers.MODULE.getModule(MessageAppend.class).isEnabled()) {
+                return;
+            }
 
             String message = pac.chatMessage();
             
