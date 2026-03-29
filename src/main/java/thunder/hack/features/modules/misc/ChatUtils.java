@@ -36,7 +36,7 @@ public class ChatUtils extends Module {
     private final Setting<RightColor> rightColor = new Setting<>("RightColor", RightColor.DarkGray, v -> time.getValue() && timeMode.is(TimeMode.New));
     private final Setting<Boolean> copyButton = new Setting<>("CopyButton", false);
     private final Setting<CopySymbol> copySymbol = new Setting<>("CopySymbol", CopySymbol.Heart, v -> copyButton.getValue());
-    private final Setting<CopyColor> copyColor = new Setting<>("CopyColor", CopyColor.Red, v -> copyButton.getValue());
+    private final Setting<CopyColor> copyColor = new Setting<>("CopyColor", CopyColor.Pink, v -> copyButton.getValue());
     private final Setting<Boolean> mention = new Setting<>("Mention", false);
     private final Setting<PMSound> pmSound = new Setting<>("PMSound", PMSound.Default);
     private final Setting<Boolean> antiBwFilter = new Setting<>("AntiBWFilter", false);
@@ -153,12 +153,12 @@ public class ChatUtils extends Module {
     }
     
     public enum CopyColor {
+        Pink(Formatting.LIGHT_PURPLE.getColorValue()),
         Red(Formatting.RED.getColorValue()),
         Orange(Formatting.GOLD.getColorValue()),
         Yellow(Formatting.YELLOW.getColorValue()),
         Green(Formatting.GREEN.getColorValue()),
         Aqua(Formatting.DARK_AQUA.getColorValue()),
-        Pink(Formatting.LIGHT_PURPLE.getColorValue()),
         DarkPurple(Formatting.DARK_PURPLE.getColorValue()),
         White(Formatting.WHITE.getColorValue()),
         Gray(Formatting.GRAY.getColorValue()),
@@ -341,7 +341,7 @@ public class ChatUtils extends Module {
                 String buttonSymbol = switch (copySymbol.getValue()) {
                     case Heart -> "❤";
                     case Sun -> "☀";
-                    case Moon -> "🌙";
+                    case Moon -> "☾";
                 };
                 
                 String plainText = messageContent.getString().replaceAll("§[0-9a-fk-or]", "");
