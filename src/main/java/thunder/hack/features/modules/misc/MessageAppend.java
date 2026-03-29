@@ -15,20 +15,14 @@ public class MessageAppend extends Module {
         super("MessageAppend", Category.MISC);
     }
 
-    private final Setting<Boolean> appendCheck = new Setting<>("Append", false);
-    private final Setting<String> appendText = new Setting<>("AppendText", "", v -> appendCheck.getValue());
-    private final Setting<Boolean> prefixCheck = new Setting<>("Prefix", false);
-    private final Setting<String> prefixText = new Setting<>("PrefixText", "", v -> prefixCheck.getValue());
-    private final Setting<Boolean> autoGlobal = new Setting<>("AutoGlobal", false);
-    private final Setting<TextType> textType = new Setting<>("TextType", TextType.Default);
+    public Setting<Boolean> appendCheck = new Setting("Append", false);
+    public Setting<String> appendText = new Setting("AppendText", "");
+    public Setting<Boolean> prefixCheck = new Setting("Prefix", false);
+    public Setting<String> prefixText = new Setting("PrefixText", "");
+    public Setting<Boolean> autoGlobal = new Setting("AutoGlobal", false);
 
     private String skip;
     private String modifiedMessage;
-
-    public enum TextType {
-        Default,
-        Custom
-    }
 
     @EventHandler
     public void onPacketSend(PacketEvent.Send e) {
@@ -43,7 +37,7 @@ public class MessageAppend extends Module {
 
         modifiedMessage = pac.chatMessage();
 
-        if (prefixCheck.getValue() && !prefixText.getValue().isEmpty()) {
+        if (prefixCheck.getValue() && prefixText.getValue() != null && !prefixText.getValue().isEmpty()) {
             if (modifiedMessage.startsWith("!")) {
                 modifiedMessage = modifiedMessage.substring(1);
                 modifiedMessage = "!" + prefixText.getValue() + " " + modifiedMessage;
@@ -52,7 +46,7 @@ public class MessageAppend extends Module {
             }
         }
 
-        if (appendCheck.getValue() && !appendText.getValue().isEmpty()) {
+        if (appendCheck.getValue() && appendText.getValue() != null && !appendText.getValue().isEmpty()) {
             modifiedMessage = modifiedMessage + " " + appendText.getValue();
         }
 
@@ -60,10 +54,6 @@ public class MessageAppend extends Module {
             if (!modifiedMessage.startsWith("!")) {
                 modifiedMessage = "!" + modifiedMessage;
             }
-        }
-
-        if (textType.getValue() == TextType.Custom) {
-            modifiedMessage = modifiedMessage;
         }
 
         skip = modifiedMessage;
