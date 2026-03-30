@@ -56,13 +56,12 @@ public class Blink extends Module {
     private final Queue<Packet<?>> storedPackets = new LinkedList<>();
     private final Queue<Packet<?>> storedTransactions = new LinkedList<>();
     private final AtomicBoolean sending = new AtomicBoolean(false);
+    private int packetCounter = 0;
+    private boolean isBlinking = true;
 
     @Override
     public void onEnable() {
-        if (mc.player == null
-                || mc.world == null
-                || mc.isIntegratedServerRunning()
-                || mc.getNetworkHandler() == null) {
+        if (mc.player == null || mc.world == null || mc.isIntegratedServerRunning() || mc.getNetworkHandler() == null) {
             disable();
             return;
         }
@@ -72,20 +71,33 @@ public class Blink extends Module {
         prevVelocity = mc.player.getVelocity();
         prevYaw = mc.player.getYaw();
         prevSprinting = mc.player.isSprinting();
-        mc.world.spawnEntity(new ClientPlayerEntity(mc, mc.world, mc.getNetworkHandler(), mc.player.getStatHandler(), mc.player.getRecipeBook(), mc.player.lastSprinting, mc.player.isSneaking()));
         sending.set(false);
         storedPackets.clear();
+        packetCounter = 0;
+        isBlinking = true;
+        
+        if (blinkPlayer == null) {
+            blinkPlayer = new PlayerEntityCopy();
+            blinkPlayer.spawn();
+        }
     }
 
     @Override
     public void onDisable() {
         if (mc.world == null || mc.player == null) return;
 
-        while (!storedPackets.isEmpty())
+        // Отправляем все накопленные пакеты
+        while (!storedPackets.isEmpty()) {
             sendPacket(storedPackets.poll());
+        }
 
-        if (blinkPlayer != null) blinkPlayer.deSpawn();
-        blinkPlayer = null;
+        if (blinkPlayer != null) {
+            blinkPlayer.deSpawn();
+            blinkPlayer = null;
+        }
+        
+        isBlinking = false;
+        packetCounter = 0;
     }
 
     @Override
@@ -95,8 +107,9 @@ public class Blink extends Module {
 
     @EventHandler
     public void onPacketReceive(PacketEvent.Receive event) {
-        if (event.getPacket() instanceof EntityVelocityUpdateS2CPacket vel && vel.getId() == mc.player.getId() && disableOnVelocity.getValue())
-            disable(isRu() ? "Выключенно из-за велосити!" : "Disabled due to velocity!");
+        if (event.getPacket() instanceof EntityVelocityUpdateS2CPacket vel && vel.getId() == mc.player.getId() && disableOnVelocity.getValue()) {
+            disable(isRu() ? "Выключен из-за велосити!" : "Disabled due to velocity!");
+        }
     }
 
     @EventHandler
@@ -109,18 +122,29 @@ public class Blink extends Module {
             return;
         }
 
-        if (packet instanceof CommonPongC2SPacket) {
+        // Пропускаем важные пакеты
+        if (packet instanceof CommonPongC2SPacket || packet instanceof KeepAliveC2SPacket) {
             storedTransactions.add(packet);
+            return;
         }
 
-        if (pulse.getValue()) {
-            if (packet instanceof PlayerMoveC2SPacket) {
-                event.cancel();
-                storedPackets.add(packet);
-            }
-        } else if (!(packet instanceof ChatMessageC2SPacket || packet instanceof TeleportConfirmC2SPacket || packet instanceof KeepAliveC2SPacket || packet instanceof AdvancementTabC2SPacket || packet instanceof ClientStatusC2SPacket)) {
-            event.cancel();
-            storedPackets.add(packet);
+        // Всегда пропускаем чат и команды
+        if (packet instanceof ChatMessageC2SPacket || packet instanceof CommandExecutionC2SPacket) {
+            return;
+        }
+
+        event.cancel();
+        storedPackets.add(packet);
+        packetCounter++;
+        
+        // Автовыключение по количеству пакетов
+        if (autoDisable.getValue() && packetCounter >= disablePackets.getValue()) {
+            disable(isRu() ? "Автовыключение!" : "Auto disabled!");
+        }
+        
+        // Пульс: отправляем накопленные пакеты
+        if (pulse.getValue() && packetCounter >= pulsePackets.getValue()) {
+            sendPackets();
         }
     }
 
@@ -128,6 +152,7 @@ public class Blink extends Module {
     public void onUpdate(EventTick event) {
         if (fullNullCheck()) return;
 
+        // Кнопка отмены
         if (isKeyPressed(cancel)) {
             storedPackets.clear();
             mc.player.setPos(lastPos.getX(), lastPos.getY(), lastPos.getZ());
@@ -137,23 +162,17 @@ public class Blink extends Module {
             mc.player.setSneaking(false);
             mc.options.sneakKey.setPressed(false);
             sending.set(true);
-            while (!storedTransactions.isEmpty())
+            while (!storedTransactions.isEmpty()) {
                 sendPacket(storedTransactions.poll());
+            }
             sending.set(false);
             disable(isRu() ? "Отменяю.." : "Canceling..");
             return;
         }
 
-        if (pulse.getValue()) {
-            if (storedPackets.size() >= pulsePackets.getValue()) {
-                sendPackets();
-            }
-        }
-
-        if (autoDisable.getValue()) {
-            if (storedPackets.size() >= disablePackets.getValue()) {
-                disable();
-            }
+        // Обновляем позицию фантомного игрока
+        if (blinkPlayer != null && lastPos != null) {
+            blinkPlayer.updatePosition(lastPos.x, lastPos.y, lastPos.z);
         }
     }
 
@@ -161,54 +180,62 @@ public class Blink extends Module {
         if (mc.player == null) return;
         sending.set(true);
 
+        // Отправляем все накопленные пакеты
         while (!storedPackets.isEmpty()) {
             Packet<?> packet = storedPackets.poll();
             sendPacket(packet);
-            if (packet instanceof PlayerMoveC2SPacket && !(packet instanceof PlayerMoveC2SPacket.LookAndOnGround)) {
-                lastPos = new Vec3d(((PlayerMoveC2SPacket) packet).getX(mc.player.getX()), ((PlayerMoveC2SPacket) packet).getY(mc.player.getY()), ((PlayerMoveC2SPacket) packet).getZ(mc.player.getZ()));
-
-                if (renderMode.getValue() == RenderMode.Model || renderMode.getValue() == RenderMode.Both) {
-                    blinkPlayer.deSpawn();
-                    blinkPlayer = new PlayerEntityCopy();
-                    blinkPlayer.spawn();
-                }
+            
+            // Обновляем последнюю позицию из пакетов движения
+            if (packet instanceof PlayerMoveC2SPacket movePacket) {
+                lastPos = new Vec3d(
+                    movePacket.getX(mc.player.getX()), 
+                    movePacket.getY(mc.player.getY()), 
+                    movePacket.getZ(mc.player.getZ())
+                );
             }
         }
 
         sending.set(false);
-        storedPackets.clear();
+        packetCounter = 0;
+        
+        // Обновляем фантомного игрока после отправки пакетов
+        if (blinkPlayer != null && lastPos != null) {
+            blinkPlayer.updatePosition(lastPos.x, lastPos.y, lastPos.z);
+        }
     }
 
     public void onRender3D(MatrixStack stack) {
-        if (mc.player == null || mc.world == null) return;
-        if (render.getValue() && lastPos != null) {
-            if (renderMode.getValue() == RenderMode.Circle || renderMode.getValue() == RenderMode.Both) {
-                float[] hsb = Color.RGBtoHSB(circleColor.getValue().getRed(), circleColor.getValue().getGreen(), circleColor.getValue().getBlue(), null);
-                float hue = (float) (System.currentTimeMillis() % 7200L) / 7200F;
-                int rgb = Color.getHSBColor(hue, hsb[1], hsb[2]).getRGB();
-                ArrayList<Vec3d> vecs = new ArrayList<>();
-                double x = lastPos.x;
-                double y = lastPos.y;
-                double z = lastPos.z;
+        if (!render.getValue() || lastPos == null) return;
+        
+        if (renderMode.getValue() == RenderMode.Circle || renderMode.getValue() == RenderMode.Both) {
+            float[] hsb = Color.RGBtoHSB(circleColor.getValue().getRed(), circleColor.getValue().getGreen(), circleColor.getValue().getBlue(), null);
+            float hue = (float) (System.currentTimeMillis() % 7200L) / 7200F;
+            int rgb = Color.getHSBColor(hue, hsb[1], hsb[2]).getRGB();
+            ArrayList<Vec3d> vecs = new ArrayList<>();
+            double x = lastPos.x;
+            double y = lastPos.y;
+            double z = lastPos.z;
 
-                for (int i = 0; i <= 360; ++i) {
-                    Vec3d vec = new Vec3d(x + Math.sin((double) i * Math.PI / 180.0) * 0.5D, y + 0.01, z + Math.cos((double) i * Math.PI / 180.0) * 0.5D);
-                    vecs.add(vec);
-                }
-
-                for (int j = 0; j < vecs.size() - 1; ++j) {
-                    Render3DEngine.drawLine(vecs.get(j), vecs.get(j + 1), new Color(rgb));
-                    hue += (1F / 360F);
-                    rgb = Color.getHSBColor(hue, hsb[1], hsb[2]).getRGB();
-                }
+            for (int i = 0; i <= 360; ++i) {
+                Vec3d vec = new Vec3d(x + Math.sin((double) i * Math.PI / 180.0) * 0.5D, y + 0.01, z + Math.cos((double) i * Math.PI / 180.0) * 0.5D);
+                vecs.add(vec);
             }
-            if (renderMode.getValue() == RenderMode.Model || renderMode.getValue() == RenderMode.Both) {
-                if (blinkPlayer == null) {
-                    blinkPlayer = new PlayerEntityCopy();
-                    blinkPlayer.spawn();
-                }
+
+            for (int j = 0; j < vecs.size() - 1; ++j) {
+                Render3DEngine.drawLine(vecs.get(j), vecs.get(j + 1), new Color(rgb));
+                hue += (1F / 360F);
+                rgb = Color.getHSBColor(hue, hsb[1], hsb[2]).getRGB();
+            }
+        }
+        
+        if (renderMode.getValue() == RenderMode.Model || renderMode.getValue() == RenderMode.Both) {
+            if (blinkPlayer == null) {
+                blinkPlayer = new PlayerEntityCopy();
+                blinkPlayer.spawn();
+            }
+            if (lastPos != null) {
+                blinkPlayer.updatePosition(lastPos.x, lastPos.y, lastPos.z);
             }
         }
     }
 }
-
