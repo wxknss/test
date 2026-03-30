@@ -583,5 +583,4 @@ public class ElytraPlus extends Module {
             return;
         }
         
-        if (mc.player.isOnGround() && mc.options.jumpKey.isPressed()) {
-            mc.player.setVelocity(mc.player.getVelocity().x, 1.2, mc.player.getVelocity().z
+        if (mc.player.isOnGround
