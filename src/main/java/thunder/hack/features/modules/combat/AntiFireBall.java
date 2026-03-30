@@ -12,7 +12,6 @@ import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
 import thunder.hack.utility.Timer;
 import thunder.hack.utility.player.InventoryUtility;
-import thunder.hack.utility.player.MovementUtility;
 import thunder.hack.utility.player.PlayerUtility;
 import thunder.hack.utility.render.Render3DEngine;
 
@@ -93,7 +92,7 @@ public class AntiFireball extends Module {
             renderTimer.reset();
         }
 
-        if (render.getValue() && renderPos != null && !renderTimer.passedMs(renderTime.getValue())) {
+        if (render.getValue() && renderPos != null && renderTimer.passedMs(renderTime.getValue())) {
             renderPos = null;
         }
     }
@@ -101,7 +100,7 @@ public class AntiFireball extends Module {
     @Override
     public void onRender3D(net.minecraft.client.util.math.MatrixStack stack) {
         if (!render.getValue() || renderPos == null) return;
-        Render3DEngine.drawBlockOutline(stack, renderPos, Color.ORANGE, 2.0f);
+        Render3DEngine.drawBlockBox(renderPos, Color.ORANGE, 2.0f, true);
     }
 
     private void updateTarget() {
