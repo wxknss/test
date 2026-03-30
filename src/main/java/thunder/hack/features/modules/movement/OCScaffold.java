@@ -150,8 +150,8 @@ public class OCScaffold extends Module {
         }
         
         if (requiresSight.getValue()) {
-            Vec3d lookPos = new Vec3d(targetPos.getX(), targetPos.getY() + 0.5, targetPos.getZ());
-            if (!mc.player.canSee(lookPos)) {
+            BlockPos lookPos = BlockPos.ofFloored(targetPos.getX(), targetPos.getY() + 0.5, targetPos.getZ());
+            if (!mc.player.canSee(lookPos.getX(), lookPos.getY(), lookPos.getZ())) {
                 return false;
             }
         }
