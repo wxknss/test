@@ -171,6 +171,7 @@ public class ModuleManager implements IManager {
     public static Tooltips tooltips = new Tooltips();
     public static Surround surround = new Surround();
     public static Scaffold scaffold = new Scaffold();
+    public static OCScaffold ocScaffold = new OCScaffold();
     public static PopChams popChams = new PopChams();
     public static NoRender noRender = new NoRender();
     public static NameTags nameTags = new NameTags();
