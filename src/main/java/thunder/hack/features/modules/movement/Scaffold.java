@@ -1,14 +1,8 @@
 package thunder.hack.features.modules.movement;
 
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.ShulkerBoxBlock;
-import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.item.BlockItem;
-import net.minecraft.item.ItemStack;
 import net.minecraft.network.packet.c2s.play.*;
-import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.BlockPos;
@@ -167,8 +161,8 @@ public class Scaffold extends Module {
             resetTicks++;
             if ((resetMode.getValue() == ResetMode.Reset && resetTicks > 3) ||
                 (resetMode.getValue() == ResetMode.Reverse && resetTicks > 5)) {
-                if (straightTicksLeft <= 0) straightTicksLeft = straightTicks;
-                if (jumpTicksLeft <= 0) jumpTicksLeft = jumpTicks;
+                if (straightTicksLeft <= 0) straightTicksLeft = straightTicks.getValue();
+                if (jumpTicksLeft <= 0) jumpTicksLeft = jumpTicks.getValue();
                 resetTicks = 0;
                 return false;
             }
