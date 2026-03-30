@@ -48,7 +48,7 @@ public class ModuleManager implements IManager {
     public static ChatTranslator chatTranslator = new ChatTranslator();
     public static PacketCanceler packetCanceler = new PacketCanceler();
     public static ClientSettings clientSettings = new ClientSettings();
-    public static AntiFireball antiFireBall = new AntiFireball();
+    public static AntiFireball antiFireball = new AntiFireball();
     public static TimerIndicator timerIndicator = new TimerIndicator();
     public static ThunderHackGui thunderHackGui = new ThunderHackGui();
     public static NoServerRotate noServerRotate = new NoServerRotate();
@@ -148,8 +148,6 @@ public class ModuleManager implements IManager {
     public static PotionHud potionHud = new PotionHud();
     public static PearlBait pearlBait = new PearlBait();
     public static AutoBuy autoBuy = new AutoBuy();
-    public static Clicker clicker = new Clicker();
-    public static TPAura tpAura = new TPAura();
     public static PacketFly packetFly = new PacketFly();
     public static MultiTask multitask = new MultiTask();
     public static LegacyHud legacyHud = new LegacyHud();
