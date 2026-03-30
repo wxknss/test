@@ -149,8 +149,11 @@ public class OCScaffold extends Module {
             return false;
         }
         
-        if (requiresSight.getValue() && !mc.player.canSee(targetPos.getX(), targetPos.getY() + 0.5, targetPos.getZ())) {
-            return false;
+        if (requiresSight.getValue()) {
+            Vec3d lookPos = new Vec3d(targetPos.getX(), targetPos.getY() + 0.5, targetPos.getZ());
+            if (!mc.player.canSee(lookPos)) {
+                return false;
+            }
         }
         
         if (resetMode.getValue() != ResetMode.None && lastPos != null && lastPos.equals(targetPos)) {
