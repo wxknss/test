@@ -48,7 +48,6 @@ public class Scaffold extends Module {
     private enum RotationTiming { Normal, OnTickSnap }
 
     private final Timer timer = new Timer();
-    private final Timer tickTimer = new Timer();
     private final List<BlockPos> placedBlocks = new ArrayList<>();
     private BlockPos targetPos = null;
     private BlockPos lastPos = null;
@@ -57,7 +56,6 @@ public class Scaffold extends Module {
     private int resetTicks = 0;
     private int straightTicksLeft = 0;
     private int jumpTicksLeft = 0;
-    private boolean wasOnGround = false;
     private boolean sentTeleport = false;
 
     @Override
@@ -67,10 +65,8 @@ public class Scaffold extends Module {
         resetTicks = 0;
         straightTicksLeft = 0;
         jumpTicksLeft = 0;
-        wasOnGround = false;
         sentTeleport = false;
         placedBlocks.clear();
-        tickTimer.reset();
     }
 
     @EventHandler
