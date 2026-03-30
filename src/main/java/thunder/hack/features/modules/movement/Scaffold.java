@@ -1,328 +1,253 @@
 package thunder.hack.features.modules.movement;
 
 import meteordevelopment.orbit.EventHandler;
+import net.minecraft.block.Block;
+import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
 import net.minecraft.item.BlockItem;
+import net.minecraft.item.ItemStack;
 import net.minecraft.network.packet.c2s.play.*;
-import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.Vec3d;
 import thunder.hack.events.impl.EventMove;
-import thunder.hack.events.impl.EventPostSync;
 import thunder.hack.events.impl.EventSync;
 import thunder.hack.events.impl.EventTick;
 import thunder.hack.features.modules.Module;
-import thunder.hack.features.modules.client.HudEditor;
 import thunder.hack.setting.Setting;
-import thunder.hack.setting.impl.ColorSetting;
-import thunder.hack.setting.impl.SettingGroup;
 import thunder.hack.utility.Timer;
-import thunder.hack.utility.player.InteractionUtility;
 import thunder.hack.utility.player.InventoryUtility;
 import thunder.hack.utility.player.MovementUtility;
 import thunder.hack.utility.player.SearchInvResult;
-import thunder.hack.utility.render.BlockAnimationUtility;
 
-import static thunder.hack.utility.player.InteractionUtility.BlockPosWithFacing;
-import static thunder.hack.utility.player.InteractionUtility.checkNearBlocks;
+import java.util.ArrayList;
+import java.util.List;
 
-public class Scaffold extends Module {
-    private final Setting<Mode> mode = new Setting<>("Mode", Mode.NCP);
-    private final Setting<InteractionUtility.PlaceMode> placeMode = new Setting<>("PlaceMode", InteractionUtility.PlaceMode.Normal, v -> !mode.is(Mode.Grim));
-    private final Setting<Switch> autoSwitch = new Setting<>("Switch", Switch.Silent);
+public class OCScaffold extends Module {
+    public OCScaffold() {
+        super("OCScaffold", Category.MOVEMENT);
+    }
+
+    private final Setting<Integer> blocksPerTick = new Setting<>("BlocksPerTick", 1, 1, 10);
+    private final Setting<Integer> extendLength = new Setting<>("ExtendLength", 3, 1, 5);
+    private final Setting<Boolean> tower = new Setting<>("Tower", true);
+    private final Setting<Boolean> sprint = new Setting<>("Sprint", true);
     private final Setting<Boolean> rotate = new Setting<>("Rotate", true);
-    private final Setting<Boolean> lockY = new Setting<>("LockY", false);
-    private final Setting<Boolean> onlyNotHoldingSpace = new Setting<>("OnlyNotHoldingSpace", false, v -> lockY.getValue());
+    private final Setting<Boolean> airSafe = new Setting<>("AirSafe", false);
+    private final Setting<Boolean> onlySafe = new Setting<>("OnlySafe", false);
+    private final Setting<Boolean> stopOnUnsafe = new Setting<>("StopOnUnsafe", false);
     private final Setting<Boolean> autoJump = new Setting<>("AutoJump", false);
-    private final Setting<Boolean> allowShift = new Setting<>("WorkWhileSneaking", false);
-    private final Setting<Boolean> tower = new Setting<>("Tower", true, v -> !mode.is(Mode.Grim));
-    private final Setting<Boolean> safewalk = new Setting<>("SafeWalk", true, v -> !mode.is(Mode.Grim));
-    private final Setting<Boolean> echestholding = new Setting<>("EchestHolding", false);
-    private final Setting<SettingGroup> renderCategory = new Setting<>("Render", new SettingGroup(false, 0));
-    private final Setting<Boolean> render = new Setting<>("Render", true).addToGroup(renderCategory);
-    private final Setting<BlockAnimationUtility.BlockRenderMode> renderMode = new Setting<>("RenderMode", BlockAnimationUtility.BlockRenderMode.All).addToGroup(renderCategory);
-    private final Setting<BlockAnimationUtility.BlockAnimationMode> animationMode = new Setting<>("AnimationMode", BlockAnimationUtility.BlockAnimationMode.Fade).addToGroup(renderCategory);
-    private final Setting<ColorSetting> renderFillColor = new Setting<>("RenderFillColor", new ColorSetting(HudEditor.getColor(0))).addToGroup(renderCategory);
-    private final Setting<ColorSetting> renderLineColor = new Setting<>("RenderLineColor", new ColorSetting(HudEditor.getColor(0))).addToGroup(renderCategory);
-    private final Setting<Integer> renderLineWidth = new Setting<>("RenderLineWidth", 2, 1, 5).addToGroup(renderCategory);
+    private final Setting<Float> timerSpeed = new Setting<>("Timer", 1.0f, 0.5f, 2.0f);
+    private final Setting<Boolean> center = new Setting<>("Center", false);
 
-    private enum Mode {
-        NCP, StrictNCP, Grim
-    }
-
-    private enum Switch {
-        Normal, Silent, Inventory, None
-    }
-
-    private final Timer timer = new Timer();
-    private BlockPosWithFacing currentblock;
-    private int prevY;
-
-    public Scaffold() {
-        super("Scaffold", Category.MOVEMENT);
-    }
+    private final List<BlockPos> placedBlocks = new ArrayList<>();
+    private BlockPos targetPos = null;
+    private float targetYaw = 0;
+    private float targetPitch = 0;
+    private int blocksPlaced = 0;
+    private boolean wasOnGround = false;
+    private boolean didJump = false;
+    private int tickCounter = 0;
 
     @Override
     public void onEnable() {
-        prevY = -999;
-    }
-
-    @EventHandler
-    public void onMove(EventMove event) {
-        if (fullNullCheck()) return;
-        if (safewalk.getValue() && !mode.is(Mode.Grim)) {
-            double x = event.getX();
-            double y = event.getY();
-            double z = event.getZ();
-
-            if (mc.player.isOnGround() && !mc.player.noClip) {
-                double increment;
-                for (increment = 0.05D; x != 0.0D && isOffsetBBEmpty(x, 0.0D); ) {
-                    if (x < increment && x >= -increment) {
-                        x = 0.0D;
-                    } else if (x > 0.0D) {
-                        x -= increment;
-                    } else {
-                        x += increment;
-                    }
-                }
-                while (z != 0.0D && isOffsetBBEmpty(0.0D, z)) {
-                    if (z < increment && z >= -increment) {
-                        z = 0.0D;
-                    } else if (z > 0.0D) {
-                        z -= increment;
-                    } else {
-                        z += increment;
-                    }
-                }
-                while (x != 0.0D && z != 0.0D && isOffsetBBEmpty(x, z)) {
-                    if (x < increment && x >= -increment) {
-                        x = 0.0D;
-                    } else if (x > 0.0D) {
-                        x -= increment;
-                    } else {
-                        x += increment;
-                    }
-                    if (z < increment && z >= -increment) {
-                        z = 0.0D;
-                    } else if (z > 0.0D) {
-                        z -= increment;
-                    } else {
-                        z += increment;
-                    }
-                }
-            }
-            event.setX(x);
-            event.setY(y);
-            event.setZ(z);
-            event.cancel();
-        }
+        targetPos = null;
+        blocksPlaced = 0;
+        wasOnGround = false;
+        didJump = false;
+        placedBlocks.clear();
+        tickCounter = 0;
     }
 
     @EventHandler
     public void onTick(EventTick e) {
-        if (mode.is(Mode.Grim)) {
-            preAction();
-            postAction();
+        if (fullNullCheck()) return;
+        
+        thunder.hack.ThunderHack.TICK_TIMER = timerSpeed.getValue();
+        
+        if (center.getValue() && mc.player.isOnGround() && MovementUtility.isMoving()) {
+            double x = Math.floor(mc.player.getX()) + 0.5;
+            double z = Math.floor(mc.player.getZ()) + 0.5;
+            mc.player.setPosition(x, mc.player.getY(), z);
+        }
+        
+        if (tower.getValue() && mc.options.jumpKey.isPressed() && !MovementUtility.isMoving() && mc.player.isOnGround() && isSafeToTower()) {
+            mc.player.jump();
+            didJump = true;
+        }
+        
+        if (autoJump.getValue() && MovementUtility.isMoving() && mc.player.isOnGround() && !wasOnGround) {
+            mc.player.jump();
+        }
+        wasOnGround = mc.player.isOnGround();
+        
+        if (sprint.getValue()) {
+            mc.player.setSprinting(true);
+            sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_SPRINTING));
+        }
+        
+        findBlocks();
+        
+        // Каждый тик ставим blocksPerTick блоков
+        if (targetPos != null && canPlace()) {
+            for (int i = 0; i < blocksPerTick.getValue(); i++) {
+                if (targetPos == null) break;
+                placeBlock();
+                blocksPlaced++;
+                // После каждой постановки ищем новый блок (если строим вперёд)
+                if (i < blocksPerTick.getValue() - 1) {
+                    findBlocks();
+                }
+            }
+            blocksPlaced = 0;
         }
     }
 
     @EventHandler
-    public void onPre(EventSync e) {
-        if (!mode.is(Mode.Grim))
-            preAction();
+    public void onSync(EventSync e) {
+        if (rotate.getValue() && targetPos != null) {
+            float[] rotations = getRotations(new Vec3d(targetPos.getX() + 0.5, targetPos.getY() + 0.5, targetPos.getZ() + 0.5));
+            targetYaw = rotations[0];
+            targetPitch = rotations[1];
+            sendPacket(new PlayerMoveC2SPacket.LookAndOnGround(targetYaw, targetPitch, mc.player.isOnGround()));
+        }
     }
 
-    public void preAction() {
-        currentblock = null;
-
-        if (mc.player.isSneaking() && !allowShift.getValue()) return;
-
-        if (prePlace(false) == -1) return;
-
-        if (mc.options.jumpKey.isPressed() && !MovementUtility.isMoving())
-            prevY = (int) (Math.floor(mc.player.getY() - 1));
-
-        if (MovementUtility.isMoving() && autoJump.getValue()) {
-            if (mc.options.jumpKey.isPressed()) {
-                if (onlyNotHoldingSpace.getValue())
-                    prevY = (int) (Math.floor(mc.player.getY() - 1));
-            } else if (mc.player.isOnGround())
-                mc.player.jump();
+    @EventHandler
+    public void onMove(EventMove e) {
+        if (fullNullCheck()) return;
+        
+        if (didJump && mc.player.getVelocity().y < 0) {
+            mc.player.setVelocity(mc.player.getVelocity().x, -0.1, mc.player.getVelocity().z);
+            didJump = false;
         }
-
-        BlockPos blockPos2 = lockY.getValue() && prevY != -999 ?
-                BlockPos.ofFloored(mc.player.getX(), prevY, mc.player.getZ())
-                : new BlockPos((int) Math.floor(mc.player.getX()), (int) (Math.floor(mc.player.getY() - 1)), (int) Math.floor(mc.player.getZ()));
-
-        if (!mc.world.getBlockState(blockPos2).isReplaceable()) return;
-
-        currentblock = checkNearBlocksExtended(blockPos2);
-        if (currentblock != null) {
-            if (rotate.getValue() && !mode.is(Mode.Grim)) {
-                Vec3d hitVec = new Vec3d(currentblock.position().getX() + 0.5, currentblock.position().getY() + 0.5, currentblock.position().getZ() + 0.5).add(new Vec3d(currentblock.facing().getUnitVector()).multiply(0.5));
-                float[] rotations = InteractionUtility.calculateAngle(hitVec);
-                mc.player.setYaw(rotations[0]);
-                mc.player.setPitch(rotations[1]);
+    }
+    
+    private void findBlocks() {
+        targetPos = null;
+        
+        BlockPos playerPos = mc.player.getBlockPos();
+        BlockPos below = playerPos.down();
+        
+        if (mc.world.getBlockState(below).isReplaceable()) {
+            targetPos = below;
+        }
+        
+        if (targetPos == null && extendLength.getValue() > 0) {
+            double yawRad = Math.toRadians(mc.player.getYaw());
+            double dirX = -Math.sin(yawRad);
+            double dirZ = Math.cos(yawRad);
+            
+            for (int i = 1; i <= extendLength.getValue(); i++) {
+                BlockPos forward = playerPos.add((int)(dirX * i), -1, (int)(dirZ * i));
+                if (mc.world.getBlockState(forward).isReplaceable()) {
+                    targetPos = forward;
+                    break;
+                }
             }
         }
-    }
-
-    @EventHandler
-    public void onPost(EventPostSync e) {
-        if (!mode.is(Mode.Grim))
-            postAction();
-    }
-
-    public void postAction() {
-        float offset = mode.is(Mode.Grim) ? 0.3f : 0.2f;
-
-        if (mc.world.getBlockCollisions(mc.player, mc.player.getBoundingBox().expand(-offset, 0, -offset).offset(0, -0.5, 0)).iterator().hasNext())
-            return;
-
-        if (currentblock == null) return;
-
-        int prevItem = prePlace(true);
-
-        if (prevItem != -1) {
-            if (mc.player.input.jumping && !MovementUtility.isMoving() && tower.getValue() && !mode.is(Mode.Grim)) {
-                mc.player.setVelocity(0.0, 0.42, 0.0);
-                if (timer.passedMs(1500)) {
-                    mc.player.setVelocity(mc.player.getVelocity().x, -0.28, mc.player.getVelocity().z);
-                    timer.reset();
-                }
-            } else timer.reset();
-
-            BlockHitResult bhr;
-
-            if (mode.is(Mode.StrictNCP))
-                bhr = new BlockHitResult(new Vec3d(currentblock.position().getX() + 0.5, currentblock.position().getY() + 0.5, currentblock.position().getZ() + 0.5).add(new Vec3d(currentblock.facing().getUnitVector()).multiply(0.5)), currentblock.facing(), currentblock.position(), false);
-            else
-                bhr = new BlockHitResult(new Vec3d((double) currentblock.position().getX() + Math.random(), currentblock.position().getY() + 0.99f, (double) currentblock.position().getZ() + Math.random()), currentblock.facing(), currentblock.position(), false);
-
-            float[] rotations = InteractionUtility.calculateAngle(bhr.getPos());
-
-            boolean sneak = InteractionUtility.needSneak(mc.world.getBlockState(bhr.getBlockPos()).getBlock()) && !mc.player.isSneaking();
-
-            if (sneak)
-                mc.player.networkHandler.sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.PRESS_SHIFT_KEY));
-
-            if (mode.is(Mode.Grim))
-                sendPacket(new PlayerMoveC2SPacket.Full(mc.player.getX(), mc.player.getY(), mc.player.getZ(), rotations[0], rotations[1], mc.player.isOnGround()));
-
-            if (placeMode.getValue() == InteractionUtility.PlaceMode.Packet && !mode.is(Mode.Grim)) {
-                boolean finalIsOffhand = prevItem == -2;
-                sendSequencedPacket(id -> new PlayerInteractBlockC2SPacket(finalIsOffhand ? Hand.OFF_HAND : Hand.MAIN_HAND, bhr, id));
-            } else
-                mc.interactionManager.interactBlock(mc.player, prevItem == -2 ? Hand.OFF_HAND : Hand.MAIN_HAND, bhr);
-
-            mc.player.networkHandler.sendPacket(new HandSwingC2SPacket(prevItem == -2 ? Hand.OFF_HAND : Hand.MAIN_HAND));
-
-            prevY = currentblock.position().getY();
-
-            if (sneak)
-                mc.player.networkHandler.sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.RELEASE_SHIFT_KEY));
-
-            if (mode.is(Mode.Grim))
-                sendPacket(new PlayerMoveC2SPacket.Full(mc.player.getX(), mc.player.getY(), mc.player.getZ(), mc.player.getYaw(), mc.player.getPitch(), mc.player.isOnGround()));
-
-            if (render.getValue())
-                BlockAnimationUtility.renderBlock(currentblock.position(), renderLineColor.getValue().getColorObject(), renderLineWidth.getValue(), renderFillColor.getValue().getColorObject(), animationMode.getValue(), renderMode.getValue());
-
-            postPlace(prevItem);
+        
+        if (targetPos != null && onlySafe.getValue() && !isSafe(targetPos)) {
+            targetPos = null;
+        }
+        
+        if (targetPos != null && airSafe.getValue() && !mc.world.getBlockState(targetPos.down()).isSolid()) {
+            targetPos = null;
+        }
+        
+        if (targetPos != null && stopOnUnsafe.getValue() && !isSafe(targetPos.down())) {
+            disable();
         }
     }
-
-    private BlockPosWithFacing checkNearBlocksExtended(BlockPos blockPos) {
-        BlockPosWithFacing ret = null;
-
-        ret = checkNearBlocks(blockPos);
-        if (ret != null) return ret;
-
-        ret = checkNearBlocks(blockPos.add(-1, 0, 0));
-        if (ret != null) return ret;
-
-        ret = checkNearBlocks(blockPos.add(1, 0, 0));
-        if (ret != null) return ret;
-
-        ret = checkNearBlocks(blockPos.add(0, 0, 1));
-        if (ret != null) return ret;
-
-        ret = checkNearBlocks(blockPos.add(0, 0, -1));
-        if (ret != null) return ret;
-
-        ret = checkNearBlocks(blockPos.add(-2, 0, 0));
-        if (ret != null) return ret;
-
-        ret = checkNearBlocks(blockPos.add(2, 0, 0));
-        if (ret != null) return ret;
-
-        ret = checkNearBlocks(blockPos.add(0, 0, 2));
-        if (ret != null) return ret;
-
-        ret = checkNearBlocks(blockPos.add(0, 0, -2));
-        if (ret != null) return ret;
-
-        ret = checkNearBlocks(blockPos.add(0, -1, 0));
-        if (ret != null) return ret;
-
-        ret = checkNearBlocks(blockPos.add(1, -1, 0));
-        if (ret != null) return ret;
-
-        ret = checkNearBlocks(blockPos.add(-1, -1, 0));
-        if (ret != null) return ret;
-
-        ret = checkNearBlocks(blockPos.add(0, -1, 1));
-        if (ret != null) return ret;
-
-        return checkNearBlocks(blockPos.add(0, -1, -1));
+    
+    private boolean canPlace() {
+        if (targetPos == null) return false;
+        return true;
     }
-
-    private int prePlace(boolean swap) {
-        if (mc.player == null || mc.world == null || mc.interactionManager == null)
-            return -1;
-
-        if (mc.player.getOffHandStack().getItem() instanceof BlockItem bi && !bi.getBlock().getDefaultState().isReplaceable())
-            return -2;
-
-        if (mc.player.getMainHandStack().getItem() instanceof BlockItem bi && !bi.getBlock().getDefaultState().isReplaceable())
-            return mc.player.getInventory().selectedSlot;
-
+    
+    private void placeBlock() {
+        if (targetPos == null) return;
+        
+        int slot = getBlockSlot();
+        if (slot == -1) return;
+        
         int prevSlot = mc.player.getInventory().selectedSlot;
-
-        SearchInvResult hotbarResult = InventoryUtility.findInHotBar(i -> i.getItem() instanceof BlockItem bi && !bi.getBlock().getDefaultState().isReplaceable());
-        SearchInvResult invResult = InventoryUtility.findInInventory(i -> i.getItem() instanceof BlockItem bi && !bi.getBlock().getDefaultState().isReplaceable());
-
-        if (swap)
-            switch (autoSwitch.getValue()) {
-                case Inventory -> {
-                    if (invResult.found()) {
-                        prevSlot = invResult.slot();
-                        mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, prevSlot, mc.player.getInventory().selectedSlot, SlotActionType.SWAP, mc.player);
-                        sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
-                    }
-                }
-                case Normal, Silent -> hotbarResult.switchTo();
-            }
-
-        return prevSlot;
-    }
-
-    private void postPlace(int prevSlot) {
-        if (prevSlot == -1 || prevSlot == -2)
-            return;
-
-        switch (autoSwitch.getValue()) {
-            case Inventory -> {
-                mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, prevSlot, mc.player.getInventory().selectedSlot, SlotActionType.SWAP, mc.player);
-                sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
-            }
-            case Silent -> InventoryUtility.switchTo(prevSlot);
+        if (slot != prevSlot) {
+            InventoryUtility.switchTo(slot);
+        }
+        
+        Direction side = getPlaceSide(targetPos);
+        if (side == null) return;
+        
+        BlockHitResult hit = new BlockHitResult(
+            new Vec3d(targetPos.getX() + 0.5 + side.getOffsetX() * 0.5,
+                      targetPos.getY() + 0.5 + side.getOffsetY() * 0.5,
+                      targetPos.getZ() + 0.5 + side.getOffsetZ() * 0.5),
+            side.getOpposite(),
+            targetPos.offset(side),
+            false
+        );
+        
+        sendSequencedPacket(id -> new PlayerInteractBlockC2SPacket(Hand.MAIN_HAND, hit, id));
+        mc.player.swingHand(Hand.MAIN_HAND);
+        
+        placedBlocks.add(targetPos);
+        if (placedBlocks.size() > 10) placedBlocks.remove(0);
+        
+        if (slot != prevSlot) {
+            InventoryUtility.switchTo(prevSlot);
         }
     }
-
-    private boolean isOffsetBBEmpty(double x, double z) {
-        return !mc.world.getBlockCollisions(mc.player, mc.player.getBoundingBox().expand(-0.1, 0, -0.1).offset(x, -2, z)).iterator().hasNext();
+    
+    private Direction getPlaceSide(BlockPos pos) {
+        if (mc.world.getBlockState(pos.down()).isSolid()) return Direction.UP;
+        if (mc.world.getBlockState(pos.up()).isSolid()) return Direction.DOWN;
+        if (mc.world.getBlockState(pos.north()).isSolid()) return Direction.SOUTH;
+        if (mc.world.getBlockState(pos.south()).isSolid()) return Direction.NORTH;
+        if (mc.world.getBlockState(pos.west()).isSolid()) return Direction.EAST;
+        if (mc.world.getBlockState(pos.east()).isSolid()) return Direction.WEST;
+        return null;
+    }
+    
+    private int getBlockSlot() {
+        if (mc.player.getMainHandStack().getItem() instanceof BlockItem) {
+            return mc.player.getInventory().selectedSlot;
+        }
+        SearchInvResult result = InventoryUtility.findInHotBar(i -> i.getItem() instanceof BlockItem);
+        if (result.found()) return result.slot();
+        result = InventoryUtility.findInInventory(i -> i.getItem() instanceof BlockItem);
+        if (result.found()) return result.slot();
+        return -1;
+    }
+    
+    private boolean isSafe(BlockPos pos) {
+        BlockState state = mc.world.getBlockState(pos);
+        Block block = state.getBlock();
+        return block == Blocks.OBSIDIAN || block == Blocks.ENDER_CHEST || block == Blocks.ANVIL || 
+               block == Blocks.ENCHANTING_TABLE || block == Blocks.CRAFTING_TABLE || block == Blocks.FURNACE ||
+               block == Blocks.CHEST || block == Blocks.TRAPPED_CHEST || state.isSolid();
+    }
+    
+    private boolean isSafeToTower() {
+        BlockPos pos = mc.player.getBlockPos();
+        for (int i = 1; i <= 3; i++) {
+            BlockPos checkPos = pos.up(i);
+            if (!mc.world.getBlockState(checkPos).isAir()) {
+                return false;
+            }
+        }
+        return true;
+    }
+    
+    private float[] getRotations(Vec3d target) {
+        Vec3d eyes = mc.player.getEyePos();
+        double diffX = target.x - eyes.x;
+        double diffY = target.y - eyes.y;
+        double diffZ = target.z - eyes.z;
+        double yaw = Math.toDegrees(Math.atan2(diffZ, diffX)) - 90;
+        double pitch = -Math.toDegrees(Math.atan2(diffY, Math.hypot(diffX, diffZ)));
+        return new float[]{(float) yaw, (float) pitch};
     }
 }
