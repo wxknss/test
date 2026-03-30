@@ -116,6 +116,20 @@ public class ElytraPlus extends Module {
     private final Setting<Float> waveAmplitude = new Setting<>("WaveAmplitude", 0.5f, 0.1f, 1.5f, v -> waveMode.getValue());
     private final Setting<Boolean> teleportMode = new Setting<>("TeleportMode", false);
     private final Setting<Integer> teleportInterval = new Setting<>("TeleportInterval", 20, 5, 100, v -> teleportMode.getValue());
+    private final Setting<Boolean> antiRubberband = new Setting<>("AntiRubberband", true);
+    private final Setting<Boolean> positionSync = new Setting<>("PositionSync", true);
+    private final Setting<Boolean> packetFlood = new Setting<>("PacketFlood", false);
+    private final Setting<Integer> floodRate = new Setting<>("FloodRate", 5, 1, 20, v -> packetFlood.getValue());
+    private final Setting<Boolean> grimBypass = new Setting<>("GrimBypass", true);
+    private final Setting<Boolean> matrixBypass = new Setting<>("MatrixBypass", false);
+    private final Setting<Boolean> fakeLag = new Setting<>("FakeLag", false);
+    private final Setting<Integer> lagTicks = new Setting<>("LagTicks", 10, 1, 40, v -> fakeLag.getValue());
+    private final Setting<Boolean> spinMode = new Setting<>("SpinMode", false);
+    private final Setting<Float> spinSpeed = new Setting<>("SpinSpeed", 180f, 10f, 360f, v -> spinMode.getValue());
+    private final Setting<Boolean> teleportBack = new Setting<>("TeleportBack", false);
+    private final Setting<Float> teleportBackDistance = new Setting<>("TeleportBackDistance", 3f, 1f, 10f, v -> teleportBack.getValue());
+    private final Setting<Boolean> entityMagnet = new Setting<>("EntityMagnet", false);
+    private final Setting<Float> magnetRange = new Setting<>("MagnetRange", 5f, 1f, 15f, v -> entityMagnet.getValue());
 
     public enum Mode {FireWork, SunriseOld, Boost, Control, Pitch40Infinite, SunriseNew, Packet}
 
@@ -131,6 +145,8 @@ public class ElytraPlus extends Module {
     private final thunder.hack.utility.Timer dipTimer = new thunder.hack.utility.Timer();
     private final thunder.hack.utility.Timer orbitTimer = new thunder.hack.utility.Timer();
     private final thunder.hack.utility.Timer teleportTimer = new thunder.hack.utility.Timer();
+    private final thunder.hack.utility.Timer floodTimer = new thunder.hack.utility.Timer();
+    private final thunder.hack.utility.Timer lagTimer = new thunder.hack.utility.Timer();
     private final thunder.hack.utility.Timer boostCooldownTimer = new thunder.hack.utility.Timer();
     private boolean waitingForConfirm = false;
     private long lastBoostTime = 0;
@@ -138,6 +154,9 @@ public class ElytraPlus extends Module {
     private int dipState = 0;
     private double orbitAngle = 0;
     private Vec3d originalPos = null;
+    private Vec3d lastConfirmedPos = null;
+    private int floodCount = 0;
+    private int lagTicksLeft = 0;
 
     private boolean infiniteFlag, hasTouchedGround, elytraEquiped, flying, started;
     private float acceleration, accelerationY, height, prevClientPitch, infinitePitch, lastInfinitePitch;
@@ -175,9 +194,14 @@ public class ElytraPlus extends Module {
         dipTimer.reset();
         orbitTimer.reset();
         teleportTimer.reset();
+        floodTimer.reset();
+        lagTimer.reset();
         dipState = 0;
         orbitAngle = 0;
         hasAutoRecasted = false;
+        floodCount = 0;
+        lagTicksLeft = 0;
+        lastConfirmedPos = null;
 
         if (mode.is(Mode.FireWork)) fireworkOnEnable();
     }
@@ -364,6 +388,10 @@ public class ElytraPlus extends Module {
             accelerationY = 0;
             pingTimer.reset();
             
+            if (positionSync.getValue()) {
+                lastConfirmedPos = mc.player.getPos();
+            }
+            
             if (mode.is(Mode.Boost) && waitingForConfirm) {
                 waitingForConfirm = false;
                 boostCooldownTimer.reset();
@@ -385,6 +413,17 @@ public class ElytraPlus extends Module {
         switch (mode.getValue()) {
             case FireWork -> fireWorkOnPlayerUpdate();
             case Pitch40Infinite -> lastInfinitePitch = PlayerUtility.fixAngle(getInfinitePitch());
+        }
+        
+        if (fakeLag.getValue()) {
+            if (lagTicksLeft > 0) {
+                lagTicksLeft--;
+                return;
+            }
+            if (lagTimer.passedMs(5000)) {
+                lagTicksLeft = lagTicks.getValue();
+                lagTimer.reset();
+            }
         }
         
         if (mode.is(Mode.Boost) && autoRecast.getValue() && !hasAutoRecasted && mc.player.isFallFlying() && recastTimer.passedMs(recastDelay.getValue())) {
@@ -426,6 +465,28 @@ public class ElytraPlus extends Module {
             mc.player.setPosition(newPos.x, newPos.y, newPos.z);
             sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
             teleportTimer.reset();
+        }
+        
+        if (mode.is(Mode.Boost) && teleportBack.getValue() && lastConfirmedPos != null && mc.player.distanceTo(lastConfirmedPos) > teleportBackDistance.getValue()) {
+            mc.player.setPosition(lastConfirmedPos.x, lastConfirmedPos.y, lastConfirmedPos.z);
+        }
+        
+        if (mode.is(Mode.Boost) && spinMode.getValue() && mc.player.isFallFlying()) {
+            mc.player.setYaw(mc.player.getYaw() + spinSpeed.getValue() / 20f);
+        }
+        
+        if (mode.is(Mode.Boost) && entityMagnet.getValue() && mc.player.isFallFlying()) {
+            for (net.minecraft.entity.Entity entity : mc.world.getEntities()) {
+                if (entity != mc.player && mc.player.distanceTo(entity) < magnetRange.getValue()) {
+                    Vec3d vec = entity.getPos().subtract(mc.player.getPos()).normalize();
+                    mc.player.setVelocity(mc.player.getVelocity().add(vec.multiply(0.1)));
+                }
+            }
+        }
+        
+        if (mode.is(Mode.Boost) && packetFlood.getValue() && floodTimer.passedMs(1000 / floodRate.getValue())) {
+            sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
+            floodTimer.reset();
         }
     }
 
@@ -594,12 +655,29 @@ public class ElytraPlus extends Module {
             return;
         }
         
+        if (antiRubberband.getValue() && lastConfirmedPos != null && mc.player.distanceTo(lastConfirmedPos) > 2.0) {
+            mc.player.setPosition(lastConfirmedPos.x, lastConfirmedPos.y, lastConfirmedPos.z);
+        }
+        
         if (noSpeedLoss.getValue()) {
             double currentSpeed = Math.hypot(e.getX(), e.getZ());
             if (currentSpeed < 0.1) {
                 double[] dir = MovementUtility.forward(0.5);
                 e.setX(e.getX() + dir[0]);
                 e.setZ(e.getZ() + dir[1]);
+            }
+        }
+        
+        if (grimBypass.getValue()) {
+            if (mc.player.age % 2 == 0) {
+                e.setY(e.getY() - 0.001);
+            }
+        }
+        
+        if (matrixBypass.getValue()) {
+            if (mc.player.age % 3 == 0) {
+                e.setX(e.getX() + 0.0001);
+                e.setZ(e.getZ() + 0.0001);
             }
         }
         
@@ -652,6 +730,7 @@ public class ElytraPlus extends Module {
         e.cancel();
         
         boostCooldownTimer.reset();
+        waitingForConfirm = true;
     }
 
     private void doControl(EventMove e) {
