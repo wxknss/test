@@ -48,6 +48,7 @@ public class ModuleManager implements IManager {
     public static ChatTranslator chatTranslator = new ChatTranslator();
     public static PacketCanceler packetCanceler = new PacketCanceler();
     public static ClientSettings clientSettings = new ClientSettings();
+    public static AntiFireball antiFireBall = new AntiFireball();
     public static TimerIndicator timerIndicator = new TimerIndicator();
     public static ThunderHackGui thunderHackGui = new ThunderHackGui();
     public static NoServerRotate noServerRotate = new NoServerRotate();
