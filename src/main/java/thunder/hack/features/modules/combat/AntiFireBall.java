@@ -6,6 +6,7 @@ import net.minecraft.entity.projectile.FireballEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.util.Hand;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 import thunder.hack.events.impl.PlayerUpdateEvent;
 import thunder.hack.features.modules.Module;
@@ -100,7 +101,7 @@ public class AntiFireball extends Module {
     @Override
     public void onRender3D(net.minecraft.client.util.math.MatrixStack stack) {
         if (!render.getValue() || renderPos == null) return;
-        Render3DEngine.drawBlockBox(renderPos, Color.ORANGE, 2.0f, true);
+        Render3DEngine.drawBlockBox(BlockPos.ofFloored(renderPos), Color.ORANGE, 2.0f, true);
     }
 
     private void updateTarget() {
