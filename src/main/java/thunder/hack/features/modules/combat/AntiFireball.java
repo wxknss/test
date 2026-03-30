@@ -6,7 +6,6 @@ import net.minecraft.entity.projectile.FireballEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.util.Hand;
-import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 import thunder.hack.events.impl.PlayerUpdateEvent;
 import thunder.hack.features.modules.Module;
@@ -14,9 +13,7 @@ import thunder.hack.setting.Setting;
 import thunder.hack.utility.Timer;
 import thunder.hack.utility.player.InventoryUtility;
 import thunder.hack.utility.player.PlayerUtility;
-import thunder.hack.utility.render.Render3DEngine;
 
-import java.awt.*;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -30,15 +27,11 @@ public class AntiFireball extends Module {
     private final Setting<Boolean> rotate = new Setting<>("Rotate", true);
     private final Setting<RayTrace> rayTrace = new Setting<>("RayTrace", RayTrace.OnlyTarget);
     private final Setting<Boolean> autoSword = new Setting<>("AutoSword", true);
-    private final Setting<Boolean> render = new Setting<>("Render", true);
-    private final Setting<Integer> renderTime = new Setting<>("RenderTime", 500, 100, 2000, v -> render.getValue());
 
     private final Timer timer = new Timer();
-    private final Timer renderTimer = new Timer();
     private FireballEntity target;
     private float rotationYaw;
     private float rotationPitch;
-    private Vec3d renderPos = null;
     private int prevSlot = -1;
 
     public enum RayTrace {
@@ -48,7 +41,6 @@ public class AntiFireball extends Module {
     @Override
     public void onEnable() {
         target = null;
-        renderPos = null;
     }
 
     @Override
@@ -89,19 +81,7 @@ public class AntiFireball extends Module {
 
         if (isInRange() && canHit()) {
             attack();
-            renderPos = target.getPos();
-            renderTimer.reset();
         }
-
-        if (render.getValue() && renderPos != null && renderTimer.passedMs(renderTime.getValue())) {
-            renderPos = null;
-        }
-    }
-
-    @Override
-    public void onRender3D(net.minecraft.client.util.math.MatrixStack stack) {
-        if (!render.getValue() || renderPos == null) return;
-        Render3DEngine.drawBlockBox(BlockPos.ofFloored(renderPos), Color.ORANGE, 2.0f, true);
     }
 
     private void updateTarget() {
