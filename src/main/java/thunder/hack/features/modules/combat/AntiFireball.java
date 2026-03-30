@@ -24,7 +24,8 @@ public class AntiFireball extends Module {
     }
 
     private final Setting<Float> range = new Setting<>("Range", 4.5f, 1f, 8f);
-    private final Setting<Boolean> rotate = new Setting<>("Rotate", true);
+    private final Setting<Integer> cps = new Setting<>("CPS", 8, 1, 20);
+    private final Setting<RotationMode> rotationMode = new Setting<>("RotationMode", RotationMode.Track);
     private final Setting<RayTrace> rayTrace = new Setting<>("RayTrace", RayTrace.OnlyTarget);
     private final Setting<Boolean> autoSword = new Setting<>("AutoSword", true);
 
@@ -33,6 +34,11 @@ public class AntiFireball extends Module {
     private float rotationYaw;
     private float rotationPitch;
     private int prevSlot = -1;
+    private int swingTicks = 0;
+
+    public enum RotationMode {
+        Track, Interact, Grim, None
+    }
 
     public enum RayTrace {
         OFF, OnlyTarget, AllEntities
@@ -41,6 +47,7 @@ public class AntiFireball extends Module {
     @Override
     public void onEnable() {
         target = null;
+        swingTicks = 0;
     }
 
     @Override
@@ -73,13 +80,21 @@ public class AntiFireball extends Module {
             }
         }
 
-        if (rotate.getValue()) {
+        if (rotationMode.getValue() != RotationMode.None) {
             calcRotations();
-            mc.player.setYaw(rotationYaw);
-            mc.player.setPitch(rotationPitch);
+            if (rotationMode.getValue() == RotationMode.Track) {
+                mc.player.setYaw(rotationYaw);
+                mc.player.setPitch(rotationPitch);
+            } else if (rotationMode.getValue() == RotationMode.Interact && swingTicks <= 0) {
+                mc.player.setYaw(rotationYaw);
+                mc.player.setPitch(rotationPitch);
+                swingTicks = 3;
+            }
         }
 
-        if (isInRange() && canHit()) {
+        if (swingTicks > 0) swingTicks--;
+
+        if (isInRange() && canHit() && timer.passedMs(1000 / cps.getValue())) {
             attack();
         }
     }
@@ -124,7 +139,7 @@ public class AntiFireball extends Module {
     private void attack() {
         if (target == null) return;
 
-        if (rotate.getValue()) {
+        if (rotationMode.getValue() == RotationMode.Grim) {
             sendPacket(new net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket.LookAndOnGround(rotationYaw, rotationPitch, mc.player.isOnGround()));
         }
 
