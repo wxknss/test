@@ -98,6 +98,24 @@ public class ElytraPlus extends Module {
     private final Setting<Float> infiniteMaxSpeed = new Setting<>("InfiniteMaxSpeed", 150f, 50f, 170f, v -> mode.getValue() == Mode.Pitch40Infinite);
     private final Setting<Float> infiniteMinSpeed = new Setting<>("InfiniteMinSpeed", 25f, 10f, 70f, v -> mode.getValue() == Mode.Pitch40Infinite);
     private final Setting<Integer> infiniteMaxHeight = new Setting<>("InfiniteMaxHeight", 200, 50, 360, v -> mode.getValue() == Mode.Pitch40Infinite);
+    
+    private final Setting<Boolean> autoRecast = new Setting<>("AutoRecast", false);
+    private final Setting<Integer> recastDelay = new Setting<>("RecastDelay", 1000, 100, 5000, v -> autoRecast.getValue());
+    private final Setting<Boolean> testDip = new Setting<>("TestDip", false);
+    private final Setting<Integer> dipInterval = new Setting<>("DipInterval", 3000, 500, 10000, v -> testDip.getValue());
+    private final Setting<Boolean> noSpeedLoss = new Setting<>("NoSpeedLoss", false);
+    private final Setting<Boolean> autoClimb = new Setting<>("AutoClimb", false);
+    private final Setting<Boolean> noFallRequired = new Setting<>("NoFallRequired", false);
+    private final Setting<Boolean> burstMode = new Setting<>("BurstMode", false);
+    private final Setting<Float> burstStrength = new Setting<>("BurstStrength", 1.5f, 0.5f, 3.0f, v -> burstMode.getValue());
+    private final Setting<Boolean> glideBoost = new Setting<>("GlideBoost", false);
+    private final Setting<Float> glideFactor = new Setting<>("GlideFactor", 1.2f, 0.5f, 2.0f, v -> glideBoost.getValue());
+    private final Setting<Boolean> orbitMode = new Setting<>("OrbitMode", false);
+    private final Setting<Float> orbitRadius = new Setting<>("OrbitRadius", 3.0f, 1.0f, 8.0f, v -> orbitMode.getValue());
+    private final Setting<Boolean> waveMode = new Setting<>("WaveMode", false);
+    private final Setting<Float> waveAmplitude = new Setting<>("WaveAmplitude", 0.5f, 0.1f, 1.5f, v -> waveMode.getValue());
+    private final Setting<Boolean> teleportMode = new Setting<>("TeleportMode", false);
+    private final Setting<Integer> teleportInterval = new Setting<>("TeleportInterval", 20, 5, 100, v -> teleportMode.getValue());
 
     public enum Mode {FireWork, SunriseOld, Boost, Control, Pitch40Infinite, SunriseNew, Packet}
 
@@ -109,15 +127,17 @@ public class ElytraPlus extends Module {
     private final thunder.hack.utility.Timer redeployTimer = new thunder.hack.utility.Timer();
     private final thunder.hack.utility.Timer strictTimer = new thunder.hack.utility.Timer();
     private final thunder.hack.utility.Timer pingTimer = new thunder.hack.utility.Timer();
-    
+    private final thunder.hack.utility.Timer recastTimer = new thunder.hack.utility.Timer();
+    private final thunder.hack.utility.Timer dipTimer = new thunder.hack.utility.Timer();
+    private final thunder.hack.utility.Timer orbitTimer = new thunder.hack.utility.Timer();
+    private final thunder.hack.utility.Timer teleportTimer = new thunder.hack.utility.Timer();
     private final thunder.hack.utility.Timer boostCooldownTimer = new thunder.hack.utility.Timer();
     private boolean waitingForConfirm = false;
     private long lastBoostTime = 0;
-    
-    // НОВЫЕ ПЕРЕМЕННЫЕ ДЛЯ АВТОМАТИЧЕСКОГО ЦИКЛА
-    private int cycleState = 0;
-    private final thunder.hack.utility.Timer cycleTimer = new thunder.hack.utility.Timer();
-    private long cycleDuration = 200;
+    private boolean hasAutoRecasted = false;
+    private int dipState = 0;
+    private double orbitAngle = 0;
+    private Vec3d originalPos = null;
 
     private boolean infiniteFlag, hasTouchedGround, elytraEquiped, flying, started;
     private float acceleration, accelerationY, height, prevClientPitch, infinitePitch, lastInfinitePitch;
@@ -151,6 +171,13 @@ public class ElytraPlus extends Module {
             height = (float) mc.player.getY();
 
         pingTimer.reset();
+        recastTimer.reset();
+        dipTimer.reset();
+        orbitTimer.reset();
+        teleportTimer.reset();
+        dipState = 0;
+        orbitAngle = 0;
+        hasAutoRecasted = false;
 
         if (mode.is(Mode.FireWork)) fireworkOnEnable();
     }
@@ -359,6 +386,47 @@ public class ElytraPlus extends Module {
             case FireWork -> fireWorkOnPlayerUpdate();
             case Pitch40Infinite -> lastInfinitePitch = PlayerUtility.fixAngle(getInfinitePitch());
         }
+        
+        if (mode.is(Mode.Boost) && autoRecast.getValue() && !hasAutoRecasted && mc.player.isFallFlying() && recastTimer.passedMs(recastDelay.getValue())) {
+            sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
+            hasAutoRecasted = true;
+            recastTimer.reset();
+        }
+        
+        if (mode.is(Mode.Boost) && !mc.player.isFallFlying() && hasAutoRecasted) {
+            hasAutoRecasted = false;
+        }
+        
+        if (mode.is(Mode.Boost) && testDip.getValue() && mc.player.isFallFlying() && dipTimer.passedMs(dipInterval.getValue())) {
+            if (dipState == 0) {
+                Vec3d velocity = mc.player.getVelocity();
+                mc.player.setVelocity(velocity.x, velocity.y - 0.5, velocity.z);
+                dipState = 1;
+            } else {
+                dipState = 0;
+            }
+            dipTimer.reset();
+        }
+        
+        if (mode.is(Mode.Boost) && orbitMode.getValue() && mc.player.isFallFlying()) {
+            orbitAngle += 0.1;
+            if (orbitAngle > Math.PI * 2) orbitAngle -= Math.PI * 2;
+            double x = Math.cos(orbitAngle) * orbitRadius.getValue();
+            double z = Math.sin(orbitAngle) * orbitRadius.getValue();
+            Vec3d targetPos = originalPos != null ? originalPos.add(x, 0, z) : mc.player.getPos().add(x, 0, z);
+            mc.player.setPosition(targetPos.x, mc.player.getY(), targetPos.z);
+            if (originalPos == null) originalPos = mc.player.getPos();
+        } else {
+            originalPos = null;
+        }
+        
+        if (mode.is(Mode.Boost) && teleportMode.getValue() && mc.player.isFallFlying() && teleportTimer.passedMs(teleportInterval.getValue())) {
+            Vec3d lookVec = mc.player.getRotationVec(1.0f);
+            Vec3d newPos = mc.player.getPos().add(lookVec.multiply(5.0));
+            mc.player.setPosition(newPos.x, newPos.y, newPos.z);
+            sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
+            teleportTimer.reset();
+        }
     }
 
     private void doMotionPacket(EventMove e) {
@@ -511,443 +579,9 @@ public class ElytraPlus extends Module {
     }
 
     private void doBoost(EventMove e) {
-        // Проверка: есть ли элитра?
         if (mc.player.getInventory().getStack(38).getItem() != Items.ELYTRA) {
             return;
         }
         
-        // ===== ВЗЛЕТ С МЕСТА (ИСПРАВЛЕННЫЙ) =====
         if (mc.player.isOnGround() && mc.options.jumpKey.isPressed()) {
-            // 1. Прыжок
-            mc.player.setVelocity(mc.player.getVelocity().x, 1.2, mc.player.getVelocity().z);
-            mc.player.jump();
-            
-            // 2. Задержка перед активацией элитры
-            new Thread(() -> {
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException ignored) {}
-                // Активируем элитру
-                sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
-            }).start();
-            
-            boostCooldownTimer.reset();
-            return;
-        }
-        
-        // Если не летим — выходим
-        if (!mc.player.isFallFlying() || mc.player.isTouchingWater() || mc.player.isInLava()) {
-            return;
-        }
-        
-        // ===== ОРИГИНАЛЬНЫЙ БУСТ =====
-        
-        int currentPing = getCurrentPing();
-        if (currentPing == 0) currentPing = 140;
-        
-        // Задержка как в оригинале (0.8 * пинг)
-        long minDelay = Math.min(300, Math.max(60, (long)(currentPing * 0.8)));
-        
-        if (!boostCooldownTimer.passedMs(minDelay)) {
-            return;
-        }
-        
-        // ===== ОРИГИНАЛЬНАЯ МЕХАНИКА БУСТА =====
-        
-        if (twoBee.getValue()) {
-            // Оригинальный буст из ThunderHack
-            if ((mc.options.jumpKey.isPressed() || !onlySpace.getValue() || cruiseControl.getValue())) {
-                double[] m = MovementUtility.forwardWithoutStrafe((factor.getValue() / 10f));
-                e.setX(e.getX() + m[0]);
-                e.setZ(e.getZ() + m[1]);
-            }
-        } else {
-            // Альтернативная механика (если 2b2t выключен)
-            Vec3d rotationVec = mc.player.getRotationVec(Render3DEngine.getTickDelta());
-            double d6 = Math.hypot(rotationVec.x, rotationVec.z);
-            double currentSpeed = Math.hypot(e.getX(), e.getZ());
-            float f4 = (float) (Math.pow(Math.cos(Math.toRadians(mc.player.getPitch())), 2) * Math.min(1, rotationVec.length() / 0.4));
-            e.setY(e.getY() + (-0.08D + (double) f4 * 0.06));
-            
-            if (e.getY() < 0 && d6 > 0) {
-                double ySpeed = e.getY() * -0.1 * (double) f4;
-                e.setY(e.getY() + ySpeed);
-                e.setX(e.getX() + rotationVec.x * ySpeed / d6);
-                e.setZ(e.getZ() + rotationVec.z * ySpeed / d6);
-            }
-            
-            if (mc.player.getPitch() < 0) {
-                double ySpeed = currentSpeed * -Math.sin(Math.toRadians(mc.player.getPitch())) * 0.04;
-                e.setY(e.getY() + ySpeed * 3.2);
-                e.setX(e.getX() - rotationVec.x * ySpeed / d6);
-                e.setZ(e.getZ() - rotationVec.z * ySpeed / d6);
-            }
-            
-            if (d6 > 0) {
-                e.setX(e.getX() + (rotationVec.x / d6 * currentSpeed - e.getX()) * 0.1D);
-                e.setZ(e.getZ() + (rotationVec.z / d6 * currentSpeed - e.getZ()) * 0.1D);
-            }
-        }
-        
-        // Ограничение скорости
-        double speed = Math.hypot(e.getX(), e.getZ());
-        if (speedLimit.getValue() && speed > maxSpeed.getValue()) {
-            e.setX(e.getX() * maxSpeed.getValue() / speed);
-            e.setZ(e.getZ() * maxSpeed.getValue() / speed);
-        }
-        
-        mc.player.setVelocity(e.getX(), e.getY(), e.getZ());
-        e.cancel();
-        
-        boostCooldownTimer.reset();
-    }
-    
-    private void doControl(EventMove e) {
-        if (mc.player.getInventory().getStack(38).getItem() != Items.ELYTRA || !mc.player.isFallFlying()) {
-            return;
-        }
-
-        double[] dir = MovementUtility.forward(xzSpeed.getValue() * (accelerate.getValue().isEnabled() ? Math.min((acceleration += accelerateFactor.getValue()) / 100.0f, 1.0f) : 1f));
-        e.setX(dir[0]);
-        e.setY(mc.options.jumpKey.isPressed() ? upSpeed.getValue() : mc.options.sneakKey.isPressed() ? -sneakDownSpeed.getValue() : -0.08 * downFactor.getValue());
-        e.setZ(dir[1]);
-
-        if (!MovementUtility.isMoving())
-            acceleration = 0;
-
-        mc.player.setVelocity(e.getX(), e.getY(), e.getZ());
-        e.cancel();
-    }
-
-    public void matrixDisabler(int elytra) {
-        elytra = elytra >= 0 && elytra < 9 ? elytra + 36 : elytra;
-        if (elytra != -2) {
-            mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, elytra, 1, SlotActionType.PICKUP, mc.player);
-            mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, 6, 1, SlotActionType.PICKUP, mc.player);
-        }
-        mc.player.networkHandler.sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
-        if (elytra != -2) {
-            mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, 6, 1, SlotActionType.PICKUP, mc.player);
-            mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, elytra, 1, SlotActionType.PICKUP, mc.player);
-        }
-        disablerTicks = disablerDelay.getValue();
-    }
-
-    private int getFireWorks(boolean hotbar) {
-        if (hotbar) {
-            return InventoryUtility.findItemInHotBar(Items.FIREWORK_ROCKET).slot();
-        } else return InventoryUtility.findItemInInventory(Items.FIREWORK_ROCKET).slot();
-    }
-
-    private void noFireworks() {
-        disable(isRu() ? "Нету фейерверков в инвентаре!" : "No fireworks in the hotbar!");
-        flying = false;
-    }
-
-    private void noElytra() {
-        disable(isRu() ? "Нету элитр в инвентаре!" : "No elytras found in the inventory!");
-        flying = false;
-    }
-
-    private void reset() {
-        slotWithFireWorks = -1;
-        prevItemInHand = Items.AIR;
-        getStackInSlotCopy = null;
-    }
-
-    private void resetPrevItems() {
-        prevElytraSlot = -1;
-        prevArmorItem = Items.AIR;
-        prevArmorItemCopy = null;
-    }
-
-    private void moveFireworksToHotbar(int n2) {
-        clickSlot(n2);
-        clickSlot(fireSlot.getValue() - 1 + 36);
-        clickSlot(n2);
-    }
-
-    private void returnItem() {
-        if (slotWithFireWorks == -1 || getStackInSlotCopy == null || prevItemInHand == Items.FIREWORK_ROCKET || prevItemInHand == Items.AIR) {
-            return;
-        }
-        int n2 = findInInventory(getStackInSlotCopy, prevItemInHand);
-        n2 = n2 < 9 && n2 != -1 ? n2 + 36 : n2;
-        clickSlot(n2);
-        clickSlot(fireSlot.getValue() - 1 + 36);
-        clickSlot(n2);
-    }
-
-    public static int findInInventory(ItemStack stack, Item item) {
-        if (stack == null) {
-            return -1;
-        }
-        for (int i2 = 0; i2 < 45; ++i2) {
-            ItemStack is = mc.player.getInventory().getStack(i2);
-            if (!ItemStack.areItemsEqual(is, stack) || is.getItem() != item) continue;
-            return i2;
-        }
-        return -1;
-    }
-
-    private int getFireworks() {
-        if (mc.player.getOffHandStack().getItem() == Items.FIREWORK_ROCKET) {
-            return -2;
-        }
-        int firesInHotbar = getFireWorks(true);
-        int firesInInventory = getFireWorks(false);
-        if (firesInInventory == -1) {
-            noFireworks();
-            return -1;
-        }
-        if (firesInHotbar == -1) {
-            if (!allowFireSwap.getValue()) {
-                disable(isRu() ? "Нет фейерверков!" : "No fireworks!");
-                return fireSlot.getValue() - 1;
-            }
-            moveFireworksToHotbar(firesInInventory);
-            return fireSlot.getValue() - 1;
-        }
-        return firesInHotbar;
-    }
-
-    private boolean canFly() {
-        if (shouldSwapToElytra()) return false;
-        return getFireworks() != -1;
-    }
-
-    private boolean shouldSwapToElytra() {
-        ItemStack is = mc.player.getEquippedStack(EquipmentSlot.CHEST);
-        return is.getItem() != Items.ELYTRA || !ElytraItem.isUsable(is);
-    }
-
-    private void doFireWork(boolean started) {
-        if (started && (float) (System.currentTimeMillis() - lastFireworkTime) < fireDelay.getValue() * 1000.0f)
-            return;
-
-        if (grim.getValue().isEnabled() && fireWorkExtender.getValue() && started && pingTimer.passedMs(200) && flightZonePos != null && PlayerUtility.getSquaredDistance2D(flightZonePos) < 7000)
-            return;
-
-        if (started && !mc.player.isFallFlying()) return;
-        if (!started && Managers.PLAYER.ticksElytraFlying > 1) return;
-
-        int slot = getFireworks();
-        if (slot == -1) {
-            slotWithFireWorks = -1;
-            return;
-        }
-        slotWithFireWorks = slot;
-
-        boolean inOffhand = mc.player.getOffHandStack().getItem() == Items.FIREWORK_ROCKET;
-
-        int prevSlot = mc.player.getInventory().selectedSlot;
-
-        if (!inOffhand && prevSlot != slot)
-            sendPacket(new UpdateSelectedSlotC2SPacket(slot));
-
-        sendSequencedPacket(id -> new PlayerInteractItemC2SPacket(inOffhand ? Hand.OFF_HAND : Hand.MAIN_HAND, id, mc.player.getYaw(), mc.player.getPitch()));
-
-        if (!inOffhand && prevSlot != mc.player.getInventory().selectedSlot)
-            sendPacket(new UpdateSelectedSlotC2SPacket(prevSlot));
-
-        flying = true;
-        lastFireworkTime = System.currentTimeMillis();
-        pingTimer.reset();
-        flightZonePos = mc.player.getPos();
-    }
-
-    private void equipElytra() {
-        int elytraSlot = InventoryUtility.getElytra();
-        if (elytraSlot == -1 && mc.player.currentScreenHandler.getCursorStack().getItem() != Items.ELYTRA) {
-            noElytra();
-            return;
-        }
-        if (!shouldSwapToElytra()) return;
-        if (prevElytraSlot == -1) {
-            ItemStack is = mc.player.getEquippedStack(EquipmentSlot.CHEST);
-            prevElytraSlot = elytraSlot;
-            prevArmorItem = is.getItem();
-            prevArmorItemCopy = is.copy();
-        }
-
-        clickSlot(elytraSlot);
-        clickSlot(6);
-        if (prevElytraSlot != -1)
-            clickSlot(prevElytraSlot);
-
-        elytraEquiped = true;
-    }
-
-    private void returnChestPlate() {
-        if (prevElytraSlot != -1 && prevArmorItem != Items.AIR) {
-            if (!elytraEquiped)
-                return;
-
-            ItemStack is = mc.player.getInventory().getStack(prevElytraSlot);
-            boolean bl2 = is != ItemStack.EMPTY && !ItemStack.areItemsEqual(is, prevArmorItemCopy);
-            int n2 = findInInventory(prevArmorItemCopy, prevArmorItem);
-            n2 = n2 < 9 && n2 != -1 ? n2 + 36 : n2;
-            if (mc.player.currentScreenHandler.getCursorStack().getItem() != Items.AIR) {
-                clickSlot(6);
-                if (prevElytraSlot != -1)
-                    clickSlot(prevElytraSlot);
-                return;
-            }
-            if (n2 == -1) return;
-
-            clickSlot(n2);
-            clickSlot(6);
-            if (!bl2) {
-                clickSlot(n2);
-            } else {
-                int n4 = findEmpty(false);
-                if (n4 != -1) {
-                    clickSlot(n4);
-                }
-            }
-        }
-        resetPrevItems();
-    }
-
-    public static int findEmpty(boolean hotbar) {
-        for (int i2 = hotbar ? 0 : 9; i2 < (hotbar ? 9 : 45); ++i2) {
-            if (!mc.player.getInventory().getStack(i2).isEmpty()) continue;
-            return i2;
-        }
-        return -1;
-    }
-
-    public void fireWorkOnPlayerUpdate() {
-        boolean inAir = mc.world.isAir(BlockPos.ofFloored(mc.player.getPos()));
-        boolean aboveLiquid = isAboveLiquid(0.1f) && inAir && mc.player.getVelocity().getY() < 0.0;
-        if (mc.player.fallDistance > 0.0f && inAir || aboveLiquid) {
-            equipElytra();
-        } else if (mc.player.isOnGround()) {
-            started = false;
-            return;
-        }
-
-        if (!MovementUtility.isMoving())
-            acceleration = 0;
-        if (!canFly()) return;
-
-        if (!mc.player.isFallFlying() && !started && mc.player.getVelocity().getY() < 0.0) {
-            sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
-            started = true;
-        }
-        if (Managers.PLAYER.ticksElytraFlying < 4) {
-            mc.options.jumpKey.setPressed(false);
-        }
-        doFireWork(true);
-    }
-
-    public void fireworkOnSync() {
-        if (grim.getValue().isEnabled() && rotate.getValue()) {
-            if (mc.options.jumpKey.isPressed() && mc.player.isFallFlying() && flying)
-                mc.player.setPitch(-45f);
-
-            if (mc.options.sneakKey.isPressed() && mc.player.isFallFlying() && flying)
-                mc.player.setPitch(45f);
-
-            mc.player.setYaw(MovementUtility.getMoveDirection());
-        }
-
-        if (!MovementUtility.isMoving() && mc.options.jumpKey.isPressed() && mc.player.isFallFlying() && flying)
-            mc.player.setPitch(-90f);
-
-        if (Managers.PLAYER.ticksElytraFlying < 5 && !mc.player.isOnGround())
-            mc.player.setPitch(-45f);
-    }
-
-    public void fireworkOnMove(EventMove e) {
-        if (mc.player.isFallFlying() && flying) {
-            if (mc.player.horizontalCollision || mc.player.verticalCollision) {
-                acceleration = 0;
-                accelerationY = 0;
-            }
-
-            if (Managers.PLAYER.ticksElytraFlying < 4) {
-                e.setY(0.2f);
-                e.cancel();
-                return;
-            }
-
-            if (mc.options.jumpKey.isPressed()) {
-                e.setY(ySpeed.getValue() * Math.min((accelerationY += 9) / 100.0f, 1.0f));
-            } else if (mc.options.sneakKey.isPressed()) {
-                e.setY(-ySpeed.getValue() * Math.min((accelerationY += 9) / 100.0f, 1.0f));
-            } else if (bowBomb.getValue() && checkGround(2.0f)) {
-                e.setY(mc.player.age % 2 == 0 ? 0.42f : -0.42f);
-            } else {
-                switch (antiKick.getValue()) {
-                    case Jitter -> e.setY(mc.player.age % 2 == 0 ? 0.08f : -0.08f);
-                    case Glide -> e.setY(-0.08f);
-                    case Off -> e.setY(0f);
-                }
-            }
-
-            if (!MovementUtility.isMoving())
-                acceleration = 0;
-
-            if (mc.player.input.movementSideways > 0) {
-                mc.player.input.movementSideways = 1;
-            } else if (mc.player.input.movementSideways < 0) {
-                mc.player.input.movementSideways = -1;
-            }
-
-            MovementUtility.modifyEventSpeed(e, xzSpeed.getValue() * Math.min((acceleration += 9) / 100.0f, 1.0f));
-            if (stayMad.getValue() && !checkGround(3.0f) && Managers.PLAYER.ticksElytraFlying > 10)
-                e.setY(0.42f);
-            e.cancel();
-        }
-    }
-
-    public static boolean checkGround(float f2) {
-        if (mc.player.getY() < 0.0) return false;
-        return !mc.world.getBlockCollisions(mc.player, mc.player.getBoundingBox().offset(0.0, -f2, 0.0)).iterator().hasNext();
-    }
-
-    public static boolean isAboveLiquid(float offset) {
-        if (mc.player == null) return false;
-        return mc.world.getBlockState(BlockPos.ofFloored(mc.player.getX(), mc.player.getY() - (double) offset, mc.player.getZ())).getBlock() instanceof FluidBlock;
-    }
-
-    public void fireworkOnEnable() {
-        if (mc.player.getEquippedStack(EquipmentSlot.CHEST).getItem() != Items.ELYTRA && mc.player.currentScreenHandler.getCursorStack().getItem() != Items.ELYTRA && InventoryUtility.getElytra() == -1) {
-            noElytra();
-            return;
-        }
-        if (getFireWorks(false) == -1) {
-            noFireworks();
-            return;
-        }
-        if (getFireWorks(true) != -1) return;
-        getStackInSlotCopy = mc.player.getInventory().getStack(fireSlot.getValue() - 1).copy();
-        prevItemInHand = mc.player.getInventory().getStack(fireSlot.getValue() - 1).getItem();
-    }
-
-    public void fireworkOnDisable() {
-        started = false;
-        if (keepFlying.getValue()) return;
-        mc.player.setVelocity(0, mc.player.getVelocity().getY(), 0);
-        new Thread(() -> {
-            sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
-            ThunderHack.TICK_TIMER = 0.1f;
-            returnItem();
-            reset();
-            try {
-                Thread.sleep(200L);
-            } catch (InterruptedException interruptedException) {
-                ThunderHack.TICK_TIMER = 1f;
-                interruptedException.printStackTrace();
-            }
-            returnChestPlate();
-            resetPrevItems();
-            ThunderHack.TICK_TIMER = 1f;
-        }).start();
-    }
-
-    private boolean isBoxCollidingGround() {
-        return mc.world.getBlockCollisions(mc.player, mc.player.getBoundingBox().expand(-0.25, 0.0, -0.25).offset(0.0, -0.3, 0.0)).iterator().hasNext();
-    }
-}
+            mc.player.setVelocity(mc.player.getVelocity().x, 1.2, mc.player.getVelocity().z
