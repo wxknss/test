@@ -1,7 +1,11 @@
 package thunder.hack.features.modules.movement;
 
 import meteordevelopment.orbit.EventHandler;
+import net.minecraft.block.Block;
+import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
 import net.minecraft.item.BlockItem;
+import net.minecraft.item.ItemStack;
 import net.minecraft.network.packet.c2s.play.*;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
@@ -26,45 +30,34 @@ public class OCScaffold extends Module {
         super("OCScaffold", Category.MOVEMENT);
     }
 
-    private final Setting<Integer> minDelay = new Setting<>("MinDelay", 0, 0, 3);
-    private final Setting<Integer> maxDelay = new Setting<>("MaxDelay", 0, 0, 3);
+    private final Setting<Integer> delay = new Setting<>("Delay", 0, 0, 3);
+    private final Setting<Integer> blocksPerTick = new Setting<>("BlocksPerTick", 1, 1, 3);
+    private final Setting<Integer> extendLength = new Setting<>("ExtendLength", 3, 1, 5);
+    private final Setting<Boolean> tower = new Setting<>("Tower", true);
+    private final Setting<Boolean> sprint = new Setting<>("Sprint", true);
+    private final Setting<Boolean> rotate = new Setting<>("Rotate", true);
+    private final Setting<Boolean> airSafe = new Setting<>("AirSafe", false);
+    private final Setting<Boolean> onlySafe = new Setting<>("OnlySafe", false);
+    private final Setting<Boolean> stopOnUnsafe = new Setting<>("StopOnUnsafe", false);
+    private final Setting<Boolean> autoJump = new Setting<>("AutoJump", false);
     private final Setting<Float> timerSpeed = new Setting<>("Timer", 1.0f, 0.5f, 2.0f);
-    private final Setting<Technique> technique = new Setting<>("Technique", Technique.Normal);
-    private final Setting<RotationMode> rotationMode = new Setting<>("RotationMode", RotationMode.Stabilized);
-    private final Setting<Boolean> telly = new Setting<>("Telly", true);
-    private final Setting<ResetMode> resetMode = new Setting<>("ResetMode", ResetMode.Reset);
-    private final Setting<Integer> straightTicks = new Setting<>("StraightTicks", 0, 0, 5);
-    private final Setting<Integer> jumpTicks = new Setting<>("JumpTicks", 3, 0, 10);
-    private final Setting<Boolean> aimOnTower = new Setting<>("AimOnTower", true);
-    private final Setting<Boolean> sameYFalling = new Setting<>("SameYFalling", true);
-    private final Setting<RotationTiming> rotationTiming = new Setting<>("RotationTiming", RotationTiming.Normal);
-    private final Setting<Boolean> clientSprint = new Setting<>("ClientSprint", false);
-    private final Setting<Boolean> serverSprint = new Setting<>("ServerSprint", false);
-
-    private enum Technique { Normal, Teleport, Reverse }
-    private enum RotationMode { Stabilized, EdgePoint, Linear, None }
-    private enum ResetMode { Reset, Reverse, None }
-    private enum RotationTiming { Normal, OnTickSnap }
+    private final Setting<Boolean> center = new Setting<>("Center", false);
 
     private final Timer timer = new Timer();
     private final List<BlockPos> placedBlocks = new ArrayList<>();
     private BlockPos targetPos = null;
-    private BlockPos lastPos = null;
     private float targetYaw = 0;
     private float targetPitch = 0;
-    private int resetTicks = 0;
-    private int straightTicksLeft = 0;
-    private int jumpTicksLeft = 0;
-    private boolean sentTeleport = false;
+    private int blocksPlaced = 0;
+    private boolean wasOnGround = false;
+    private boolean didJump = false;
 
     @Override
     public void onEnable() {
         targetPos = null;
-        lastPos = null;
-        resetTicks = 0;
-        straightTicksLeft = 0;
-        jumpTicksLeft = 0;
-        sentTeleport = false;
+        blocksPlaced = 0;
+        wasOnGround = false;
+        didJump = false;
         placedBlocks.clear();
     }
 
@@ -74,15 +67,44 @@ public class OCScaffold extends Module {
         
         thunder.hack.ThunderHack.TICK_TIMER = timerSpeed.getValue();
         
-        if (rotationTiming.getValue() == RotationTiming.OnTickSnap && targetPos != null) {
-            sendRotation();
+        if (center.getValue() && mc.player.isOnGround() && MovementUtility.isMoving()) {
+            double x = Math.floor(mc.player.getX()) + 0.5;
+            double z = Math.floor(mc.player.getZ()) + 0.5;
+            mc.player.setPosition(x, mc.player.getY(), z);
+        }
+        
+        if (tower.getValue() && mc.options.jumpKey.isPressed() && !MovementUtility.isMoving() && mc.player.isOnGround() && isSafeToTower()) {
+            mc.player.jump();
+            didJump = true;
+        }
+        
+        if (autoJump.getValue() && MovementUtility.isMoving() && mc.player.isOnGround() && !wasOnGround) {
+            mc.player.jump();
+        }
+        wasOnGround = mc.player.isOnGround();
+        
+        if (sprint.getValue()) {
+            mc.player.setSprinting(true);
+            sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_SPRINTING));
+        }
+        
+        findBlocks();
+        
+        if (targetPos != null && canPlace() && blocksPlaced < blocksPerTick.getValue()) {
+            placeBlock();
+            blocksPlaced++;
+        } else {
+            blocksPlaced = 0;
         }
     }
 
     @EventHandler
     public void onSync(EventSync e) {
-        if (rotationTiming.getValue() == RotationTiming.Normal && targetPos != null) {
-            sendRotation();
+        if (rotate.getValue() && targetPos != null) {
+            float[] rotations = getRotations(new Vec3d(targetPos.getX() + 0.5, targetPos.getY() + 0.5, targetPos.getZ() + 0.5));
+            targetYaw = rotations[0];
+            targetPitch = rotations[1];
+            sendPacket(new PlayerMoveC2SPacket.LookAndOnGround(targetYaw, targetPitch, mc.player.isOnGround()));
         }
     }
 
@@ -90,77 +112,52 @@ public class OCScaffold extends Module {
     public void onMove(EventMove e) {
         if (fullNullCheck()) return;
         
-        if (MovementUtility.isMoving() && sameYFalling.getValue() && mc.player.getVelocity().y < 0 && mc.player.isOnGround()) {
+        if (didJump && mc.player.getVelocity().y < 0) {
             mc.player.setVelocity(mc.player.getVelocity().x, -0.1, mc.player.getVelocity().z);
-        }
-        
-        if (clientSprint.getValue()) {
-            mc.player.setSprinting(true);
-        }
-        if (serverSprint.getValue()) {
-            sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_SPRINTING));
-        }
-        
-        findBlock();
-        
-        if (targetPos != null && canPlace()) {
-            placeBlock();
+            didJump = false;
         }
     }
     
-    private void findBlock() {
-        BlockPos below = BlockPos.ofFloored(mc.player.getX(), mc.player.getY() - 0.5, mc.player.getZ());
-        BlockPos under = below.down();
+    private void findBlocks() {
+        targetPos = null;
         
-        if (technique.getValue() == Technique.Reverse) {
-            if (MovementUtility.isMoving() && !mc.world.getBlockState(under).isAir()) {
-                targetPos = under.up();
-            } else {
-                targetPos = below;
-            }
-        } else {
+        BlockPos playerPos = mc.player.getBlockPos();
+        BlockPos below = playerPos.down();
+        
+        if (mc.world.getBlockState(below).isReplaceable()) {
             targetPos = below;
         }
         
-        if (targetPos != null && !mc.world.getBlockState(targetPos).isReplaceable()) {
+        if (targetPos == null && extendLength.getValue() > 0) {
+            double yawRad = Math.toRadians(mc.player.getYaw());
+            double dirX = -Math.sin(yawRad);
+            double dirZ = Math.cos(yawRad);
+            
+            for (int i = 1; i <= extendLength.getValue(); i++) {
+                BlockPos forward = playerPos.add((int)(dirX * i), -1, (int)(dirZ * i));
+                if (mc.world.getBlockState(forward).isReplaceable()) {
+                    targetPos = forward;
+                    break;
+                }
+            }
+        }
+        
+        if (targetPos != null && onlySafe.getValue() && !isSafe(targetPos)) {
             targetPos = null;
         }
         
-        if (telly.getValue() && !sentTeleport && targetPos != null && mc.player.squaredDistanceTo(targetPos.getX(), targetPos.getY(), targetPos.getZ()) > 9) {
-            sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(targetPos.getX() + 0.5, targetPos.getY() + 0.1, targetPos.getZ() + 0.5, false));
-            sentTeleport = true;
-        } else {
-            sentTeleport = false;
+        if (targetPos != null && airSafe.getValue() && !mc.world.getBlockState(targetPos.down()).isSolid()) {
+            targetPos = null;
+        }
+        
+        if (targetPos != null && stopOnUnsafe.getValue() && !isSafe(targetPos.down())) {
+            disable();
         }
     }
     
     private boolean canPlace() {
-        int delay = (int) (Math.random() * (maxDelay.getValue() - minDelay.getValue() + 1) + minDelay.getValue());
-        if (!timer.passedMs(delay)) return false;
-        
-        if (straightTicksLeft > 0) {
-            straightTicksLeft--;
-            return false;
-        }
-        
-        if (jumpTicksLeft > 0) {
-            jumpTicksLeft--;
-            return false;
-        }
-        
-        if (resetMode.getValue() != ResetMode.None && lastPos != null && lastPos.equals(targetPos)) {
-            resetTicks++;
-            if ((resetMode.getValue() == ResetMode.Reset && resetTicks > 3) ||
-                (resetMode.getValue() == ResetMode.Reverse && resetTicks > 5)) {
-                if (straightTicksLeft <= 0) straightTicksLeft = straightTicks.getValue();
-                if (jumpTicksLeft <= 0) jumpTicksLeft = jumpTicks.getValue();
-                resetTicks = 0;
-                return false;
-            }
-        } else {
-            resetTicks = 0;
-        }
-        
+        if (targetPos == null) return false;
+        if (!timer.passedMs(delay.getValue())) return false;
         return true;
     }
     
@@ -187,54 +184,17 @@ public class OCScaffold extends Module {
             false
         );
         
-        if (rotationMode.getValue() != RotationMode.None) {
-            float[] rotations = getRotations(hit.getPos());
-            targetYaw = rotations[0];
-            targetPitch = rotations[1];
-            
-            if (rotationMode.getValue() == RotationMode.Stabilized) {
-                float yawDiff = Math.abs(mc.player.getYaw() - targetYaw);
-                float pitchDiff = Math.abs(mc.player.getPitch() - targetPitch);
-                if (yawDiff > 45 || pitchDiff > 45) {
-                    targetYaw = mc.player.getYaw();
-                    targetPitch = mc.player.getPitch();
-                }
-            } else if (rotationMode.getValue() == RotationMode.EdgePoint) {
-                targetPitch = Math.min(85, targetPitch + 5);
-            }
-            
-            if (rotationTiming.getValue() == RotationTiming.Normal) {
-                mc.player.setYaw(targetYaw);
-                mc.player.setPitch(targetPitch);
-            }
-        }
-        
-        if (technique.getValue() == Technique.Teleport) {
-            sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(mc.player.getX(), mc.player.getY(), mc.player.getZ(), false));
-        }
-        
-        if (aimOnTower.getValue() && mc.options.jumpKey.isPressed() && !MovementUtility.isMoving()) {
-            float[] rotations = getRotations(new Vec3d(targetPos.getX() + 0.5, targetPos.getY() + 0.5, targetPos.getZ() + 0.5));
-            mc.player.setYaw(rotations[0]);
-            mc.player.setPitch(rotations[1]);
-        }
-        
         sendSequencedPacket(id -> new PlayerInteractBlockC2SPacket(Hand.MAIN_HAND, hit, id));
         mc.player.swingHand(Hand.MAIN_HAND);
         
         placedBlocks.add(targetPos);
         if (placedBlocks.size() > 10) placedBlocks.remove(0);
         
-        lastPos = targetPos;
         timer.reset();
         
         if (slot != prevSlot) {
             InventoryUtility.switchTo(prevSlot);
         }
-    }
-    
-    private void sendRotation() {
-        sendPacket(new PlayerMoveC2SPacket.LookAndOnGround(targetYaw, targetPitch, mc.player.isOnGround()));
     }
     
     private Direction getPlaceSide(BlockPos pos) {
@@ -256,6 +216,25 @@ public class OCScaffold extends Module {
         result = InventoryUtility.findInInventory(i -> i.getItem() instanceof BlockItem);
         if (result.found()) return result.slot();
         return -1;
+    }
+    
+    private boolean isSafe(BlockPos pos) {
+        BlockState state = mc.world.getBlockState(pos);
+        Block block = state.getBlock();
+        return block == Blocks.OBSIDIAN || block == Blocks.ENDER_CHEST || block == Blocks.ANVIL || 
+               block == Blocks.ENCHANTING_TABLE || block == Blocks.CRAFTING_TABLE || block == Blocks.FURNACE ||
+               block == Blocks.CHEST || block == Blocks.TRAPPED_CHEST || state.isSolid();
+    }
+    
+    private boolean isSafeToTower() {
+        BlockPos pos = mc.player.getBlockPos();
+        for (int i = 1; i <= 3; i++) {
+            BlockPos checkPos = pos.up(i);
+            if (!mc.world.getBlockState(checkPos).isAir()) {
+                return false;
+            }
+        }
+        return true;
     }
     
     private float[] getRotations(Vec3d target) {
