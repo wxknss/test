@@ -3,6 +3,8 @@ package thunder.hack.features.modules.misc;
 import net.minecraft.client.gui.screen.ingame.GenericContainerScreen;
 import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.text.Text;
+import net.minecraft.util.Hand;
+import net.minecraft.util.hit.BlockHitResult;
 import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
 import thunder.hack.utility.Timer;
@@ -40,14 +42,12 @@ public class BWTweaks extends Module {
 
         switch (step) {
             case 1:
-                // открываем шоп
                 selectSlot(4);
                 step = 2;
                 timer.reset();
                 break;
 
             case 2:
-                // кликаем в GUI
                 if (mc.currentScreen instanceof GenericContainerScreen screen) {
                     int slot = (pvpVersion.getValue() == PVPVersion.V1_8) ? 13 : 15;
                     clickSlot(screen, slot);
@@ -57,7 +57,6 @@ public class BWTweaks extends Module {
                 break;
 
             case 3:
-                // закрываем
                 if (mc.currentScreen != null) {
                     mc.player.closeHandledScreen();
                 }
@@ -119,9 +118,8 @@ public class BWTweaks extends Module {
 
     private void selectSlot(int slot) {
         mc.player.getInventory().selectedSlot = slot;
-        // имитируем правый клик
-        if (mc.crosshairTarget != null) {
-            mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, (net.minecraft.util.hit.BlockHitResult) mc.crosshairTarget);
+        if (mc.crosshairTarget instanceof BlockHitResult hit) {
+            mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, hit);
         }
     }
 
@@ -135,7 +133,7 @@ public class BWTweaks extends Module {
         );
     }
 
-    private void sendMessage(String msg) {
+    private void displayMessage(String msg) {
         if (mc.player != null) {
             mc.player.sendMessage(Text.literal(msg), false);
         }
