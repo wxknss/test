@@ -34,7 +34,7 @@ public class OCScaffold extends Module {
     private final Setting<Float> timerSpeed = new Setting<>("Timer", 1.0f, 0.5f, 2.0f);
     private final Setting<Technique> technique = new Setting<>("Technique", Technique.Normal);
     private final Setting<RotationMode> rotationMode = new Setting<>("RotationMode", RotationMode.Stabilized);
-    private final Setting<Boolean> requiresSight = new Setting<>("RequiresSight", true);
+    private final Setting<Boolean> requiresSight = new Setting<>("RequiresSight", false);
     private final Setting<Boolean> telly = new Setting<>("Telly", true);
     private final Setting<ResetMode> resetMode = new Setting<>("ResetMode", ResetMode.Reset);
     private final Setting<Integer> straightTicks = new Setting<>("StraightTicks", 0, 0, 5);
@@ -239,14 +239,6 @@ public class OCScaffold extends Module {
         if (jumpTicksLeft > 0) {
             jumpTicksLeft--;
             return false;
-        }
-        
-        // RequiresSight
-        if (requiresSight.getValue()) {
-            BlockPos lookPos = BlockPos.ofFloored(targetPos.getX(), targetPos.getY() + 0.5, targetPos.getZ());
-            if (!mc.player.canSee(lookPos.getX(), lookPos.getY(), lookPos.getZ())) {
-                return false;
-            }
         }
         
         // MinDist
