@@ -48,14 +48,11 @@ public class ModuleManager implements IManager {
     public static ChatTranslator chatTranslator = new ChatTranslator();
     public static PacketCanceler packetCanceler = new PacketCanceler();
     public static ClientSettings clientSettings = new ClientSettings();
-    public static AntiFireball antiFireball = new AntiFireball();
     public static TimerIndicator timerIndicator = new TimerIndicator();
     public static ThunderHackGui thunderHackGui = new ThunderHackGui();
     public static NoServerRotate noServerRotate = new NoServerRotate();
     public static BreakHighLight breakHighLight = new BreakHighLight();
     public static BlockHighLight blockHighLight = new BlockHighLight();
-    public static TridentBoost tridentBoost = new TridentBoost();
-    public static AntiBallPlace antiBallPlace = new AntiBallPlace();
     public static AntiBadEffects antiBadEffects = new AntiBadEffects();
     public static MouseElytraFix mouseElytraFix = new MouseElytraFix();
     public static TotemAnimation totemAnimation = new TotemAnimation();
@@ -70,6 +67,8 @@ public class ModuleManager implements IManager {
     public static MoreKnockback moreKnockback = new MoreKnockback();
     public static AntiServerAdd antiServerAdd = new AntiServerAdd();
     public static AntiLegitMiss antiLegitMiss = new AntiLegitMiss();
+    public static AntiBallPlace antiBallPlace = new AntiBallPlace();
+    public static TridentBoost tridentBoost = new TridentBoost();
     public static Trajectories trajectories = new Trajectories();
     public static TargetStrafe targetStrafe = new TargetStrafe();
     public static RadarRewrite radarRewrite = new RadarRewrite();
@@ -147,7 +146,6 @@ public class ModuleManager implements IManager {
     public static SpeedMine speedMine = new SpeedMine();
     public static PotionHud potionHud = new PotionHud();
     public static PearlBait pearlBait = new PearlBait();
-    public static AutoBuy autoBuy = new AutoBuy();
     public static PacketFly packetFly = new PacketFly();
     public static MultiTask multitask = new MultiTask();
     public static LegacyHud legacyHud = new LegacyHud();
@@ -171,7 +169,6 @@ public class ModuleManager implements IManager {
     public static Tooltips tooltips = new Tooltips();
     public static Surround surround = new Surround();
     public static Scaffold scaffold = new Scaffold();
-    public static OCScaffold ocScaffold = new OCScaffold();
     public static PopChams popChams = new PopChams();
     public static NoRender noRender = new NoRender();
     public static NameTags nameTags = new NameTags();
@@ -188,6 +185,10 @@ public class ModuleManager implements IManager {
     public static AutoFish autoFish = new AutoFish();
     public static AutoBuff autoBuff = new AutoBuff();
     public static AutoAuth autoAuth = new AutoAuth();
+    public static AutoBuy autoBuy = new AutoBuy();
+    public static AntiFireball antiFireball = new AntiFireball();
+    public static BWTweaks bwTweaks = new BWTweaks();
+    public static ItemDropper itemDropper = new ItemDropper();
     public static ArmorHud armorHud = new ArmorHud();
     public static AirPlace airPlace = new AirPlace();
     public static SelfTrap selfTrap = new SelfTrap();
@@ -205,7 +206,6 @@ public class ModuleManager implements IManager {
     public static AutoBed autoBed = new AutoBed();
     public static TNTAura tntAura = new TNTAura();
     public static VoidESP voidESP = new VoidESP();
-    public static BWTweaks bwTweaks = new BWTweaks();
     public static Tracker tracker = new Tracker();
     public static TpsSync tpsSync = new TpsSync();
     public static Spammer spammer = new Spammer();
