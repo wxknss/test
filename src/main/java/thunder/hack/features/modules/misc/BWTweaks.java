@@ -2,8 +2,6 @@ package thunder.hack.features.modules.misc;
 
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.client.gui.screen.ingame.GenericContainerScreen;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
 import net.minecraft.network.packet.c2s.play.CloseHandledScreenC2SPacket;
 import net.minecraft.network.packet.c2s.play.PlayerInteractBlockC2SPacket;
 import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
@@ -11,9 +9,6 @@ import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
 import thunder.hack.events.impl.PacketEvent;
 import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
@@ -55,29 +50,26 @@ public class BWTweaks extends Module {
         String message = packet.content().getString();
 
         if (debug.getValue()) {
-            sendMessage("§7[BWTweaks] §f" + message);
+            displayMessage("§7[BWTweaks] §f" + message);
         }
 
-        // Присоединились к команде
         if (message.contains("Вы присоединились к команде")) {
             teamJoined = true;
             tickCounter = 0;
-            if (debug.getValue()) sendMessage("§a[BWTweaks] Team joined detected");
+            if (debug.getValue()) displayMessage("§a[BWTweaks] Team joined detected");
             return;
         }
 
-        // Линия разделитель — голосование отменяется
         if (message.contains("▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬")) {
             voteStarted = false;
-            if (debug.getValue()) sendMessage("§c[BWTweaks] Vote cancelled by separator");
+            if (debug.getValue()) displayMessage("§c[BWTweaks] Vote cancelled by separator");
             return;
         }
 
-        // Если есть сообщение о голосовании
         if (message.contains("Выберите версию PvP") || message.contains("выберите версию") || message.contains("голосование")) {
             if (teamJoined && !voteStarted) {
                 voteStarted = true;
-                if (debug.getValue()) sendMessage("§a[BWTweaks] Vote detected, starting in 20 ticks");
+                if (debug.getValue()) displayMessage("§a[BWTweaks] Vote detected, starting in 20 ticks");
             }
         }
     }
@@ -86,11 +78,10 @@ public class BWTweaks extends Module {
     public void onUpdate() {
         if (fullNullCheck()) return;
 
-        // Ждём 20 тиков после входа в команду
         if (teamJoined && !voteStarted) {
             tickCounter++;
             if (tickCounter >= 20) {
-                if (debug.getValue()) sendMessage("§a[BWTweaks] Starting vote sequence");
+                if (debug.getValue()) displayMessage("§a[BWTweaks] Starting vote sequence");
                 startVote();
             }
             return;
@@ -171,7 +162,7 @@ public class BWTweaks extends Module {
             case DONE:
                 reset();
                 disable();
-                sendMessage("§a[BWTweaks] Vote completed!");
+                displayMessage("§a[BWTweaks] Vote completed!");
                 break;
         }
     }
@@ -185,7 +176,6 @@ public class BWTweaks extends Module {
         sendPacket(new UpdateSelectedSlotC2SPacket(slot));
         mc.player.getInventory().selectedSlot = slot;
         
-        // Имитация правого клика по блоку (открытие шопа)
         if (mc.crosshairTarget instanceof BlockHitResult hit) {
             sendSequencedPacket(id -> new PlayerInteractBlockC2SPacket(Hand.MAIN_HAND, hit, id));
         }
@@ -199,7 +189,7 @@ public class BWTweaks extends Module {
             SlotActionType.PICKUP,
             mc.player
         );
-        if (debug.getValue()) sendMessage("§7[BWTweaks] Clicked slot " + slot);
+        if (debug.getValue()) displayMessage("§7[BWTweaks] Clicked slot " + slot);
     }
 
     private void closeInventory() {
@@ -217,7 +207,7 @@ public class BWTweaks extends Module {
         timer.reset();
     }
 
-    private void sendMessage(String msg) {
+    private void displayMessage(String msg) {
         if (mc.player != null) {
             mc.player.sendMessage(Text.literal(msg), false);
         }
