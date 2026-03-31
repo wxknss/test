@@ -205,6 +205,7 @@ public class ModuleManager implements IManager {
     public static AutoBed autoBed = new AutoBed();
     public static TNTAura tntAura = new TNTAura();
     public static VoidESP voidESP = new VoidESP();
+    public static BWTweaks bwTweaks = new BWTweaks();
     public static Tracker tracker = new Tracker();
     public static TpsSync tpsSync = new TpsSync();
     public static Spammer spammer = new Spammer();
