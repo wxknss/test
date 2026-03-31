@@ -1,14 +1,8 @@
 package thunder.hack.features.modules.misc;
 
-import meteordevelopment.orbit.EventHandler;
 import net.minecraft.client.gui.screen.ingame.GenericContainerScreen;
-import net.minecraft.network.packet.c2s.play.CloseHandledScreenC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerInteractItemC2SPacket;
-import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
 import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.text.Text;
-import net.minecraft.util.Hand;
-import thunder.hack.events.impl.PacketEvent;
 import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
 import thunder.hack.utility.Timer;
@@ -27,148 +21,123 @@ public class BWTweaks extends Module {
 
     private final Timer timer = new Timer();
     private int step = 0;
-    private boolean teamJoined = false;
-    private boolean voteStarted = false;
-    private boolean firstMenuClosed = false;
-
-    @Override
-    public void onEnable() {
-        reset();
-    }
-
-    @EventHandler
-    public void onPacketReceive(PacketEvent.Receive e) {
-        if (fullNullCheck()) return;
-        
-        if (e.getPacket() instanceof CloseHandledScreenC2SPacket && !firstMenuClosed && teamJoined && !voteStarted) {
-            firstMenuClosed = true;
-        }
-        
-        if (!(e.getPacket() instanceof net.minecraft.network.packet.s2c.play.GameMessageS2CPacket packet)) return;
-
-        String message = packet.content().getString();
-
-        if (message.contains("Вы присоединились к команде")) {
-            teamJoined = true;
-            firstMenuClosed = false;
-            return;
-        }
-
-        if (message.contains("Выберите версию PvP") || message.contains("голосование")) {
-            if (teamJoined && firstMenuClosed && !voteStarted) {
-                voteStarted = true;
-                step = 1;
-                timer.reset();
-            }
-        }
-    }
+    private boolean waitingForMenu = false;
 
     @Override
     public void onUpdate() {
         if (fullNullCheck()) return;
-        
-        if (!voteStarted || step == 0) return;
+
+        if (!waitingForMenu) {
+            if (step == 0) {
+                step = 1;
+                waitingForMenu = true;
+                timer.reset();
+            }
+            return;
+        }
 
         if (!timer.passedMs(delay.getValue())) return;
 
         switch (step) {
             case 1:
-                openShop();
+                // открываем шоп
+                selectSlot(4);
                 step = 2;
                 timer.reset();
                 break;
-                
+
             case 2:
-                clickInGui((pvpVersion.getValue() == PVPVersion.V1_8) ? 13 : 15);
-                step = 3;
-                timer.reset();
+                // кликаем в GUI
+                if (mc.currentScreen instanceof GenericContainerScreen screen) {
+                    int slot = (pvpVersion.getValue() == PVPVersion.V1_8) ? 13 : 15;
+                    clickSlot(screen, slot);
+                    step = 3;
+                    timer.reset();
+                }
                 break;
-                
+
             case 3:
-                closeInventory();
+                // закрываем
+                if (mc.currentScreen != null) {
+                    mc.player.closeHandledScreen();
+                }
                 step = 4;
                 timer.reset();
                 break;
-                
+
             case 4:
                 selectSlot(5);
                 step = 5;
                 timer.reset();
                 break;
-                
+
             case 5:
-                clickInGui(13);
-                step = 6;
-                timer.reset();
+                if (mc.currentScreen instanceof GenericContainerScreen screen) {
+                    clickSlot(screen, 13);
+                    step = 6;
+                    timer.reset();
+                }
                 break;
-                
+
             case 6:
-                closeInventory();
+                if (mc.currentScreen != null) {
+                    mc.player.closeHandledScreen();
+                }
                 step = 7;
                 timer.reset();
                 break;
-                
+
             case 7:
                 selectSlot(6);
                 step = 8;
                 timer.reset();
                 break;
-                
+
             case 8:
-                clickInGui(15);
-                step = 9;
-                timer.reset();
+                if (mc.currentScreen instanceof GenericContainerScreen screen) {
+                    clickSlot(screen, 15);
+                    step = 9;
+                    timer.reset();
+                }
                 break;
-                
+
             case 9:
-                closeInventory();
+                if (mc.currentScreen != null) {
+                    mc.player.closeHandledScreen();
+                }
                 step = 10;
                 timer.reset();
                 break;
-                
+
             case 10:
-                voteStarted = false;
-                teamJoined = false;
-                firstMenuClosed = false;
+                waitingForMenu = false;
                 step = 0;
+                disable();
                 break;
         }
     }
 
-    private void openShop() {
-        selectSlot(4);
-    }
-
     private void selectSlot(int slot) {
-        sendPacket(new UpdateSelectedSlotC2SPacket(slot));
         mc.player.getInventory().selectedSlot = slot;
-        sendSequencedPacket(id -> new PlayerInteractItemC2SPacket(Hand.MAIN_HAND, id, mc.player.getYaw(), mc.player.getPitch()));
-    }
-
-    private void clickInGui(int slot) {
-        if (mc.currentScreen instanceof GenericContainerScreen screen) {
-            mc.interactionManager.clickSlot(
-                screen.getScreenHandler().syncId,
-                slot,
-                0,
-                SlotActionType.PICKUP,
-                mc.player
-            );
+        // имитируем правый клик
+        if (mc.crosshairTarget != null) {
+            mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, (net.minecraft.util.hit.BlockHitResult) mc.crosshairTarget);
         }
     }
 
-    private void closeInventory() {
-        if (mc.currentScreen != null) {
-            sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
-            mc.player.closeHandledScreen();
-        }
+    private void clickSlot(GenericContainerScreen screen, int slot) {
+        mc.interactionManager.clickSlot(
+            screen.getScreenHandler().syncId,
+            slot,
+            0,
+            SlotActionType.PICKUP,
+            mc.player
+        );
     }
 
-    private void reset() {
-        step = 0;
-        teamJoined = false;
-        voteStarted = false;
-        firstMenuClosed = false;
-        timer.reset();
+    private void sendMessage(String msg) {
+        if (mc.player != null) {
+            mc.player.sendMessage(Text.literal(msg), false);
+        }
     }
 }
