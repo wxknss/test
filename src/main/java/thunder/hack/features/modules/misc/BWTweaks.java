@@ -21,7 +21,7 @@ public class BWTweaks extends Module {
 
     private final Setting<Integer> delay = new Setting<>("Delay", 500, 100, 2000);
     private final Setting<PVPVersion> pvpVersion = new Setting<>("PVPVersion", PVPVersion.V1_8);
-    private final Setting<Boolean> debug = new Setting<>("Debug", false);
+    private final Setting<Boolean> debug = new Setting<>("Debug", true);
 
     private enum PVPVersion {
         V1_8, V1_12
@@ -40,6 +40,7 @@ public class BWTweaks extends Module {
     @Override
     public void onEnable() {
         reset();
+        if (debug.getValue()) displayMessage("§a[BWTweaks] Enabled");
     }
 
     @EventHandler
@@ -50,9 +51,10 @@ public class BWTweaks extends Module {
         String message = packet.content().getString();
 
         if (debug.getValue()) {
-            displayMessage("§7[BWTweaks] §f" + message);
+            displayMessage("§7[BWTweaks] Chat: §f" + message);
         }
 
+        // Присоединились к команде (ищем часть строки, т.к. дальше идёт цвет команды)
         if (message.contains("Вы присоединились к команде")) {
             teamJoined = true;
             tickCounter = 0;
@@ -60,12 +62,14 @@ public class BWTweaks extends Module {
             return;
         }
 
+        // Линия разделитель — голосование отменяется (ищем часть строки)
         if (message.contains("▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬")) {
             voteStarted = false;
             if (debug.getValue()) displayMessage("§c[BWTweaks] Vote cancelled by separator");
             return;
         }
 
+        // Голосование (ищем ключевые слова)
         if (message.contains("Выберите версию PvP") || message.contains("выберите версию") || message.contains("голосование")) {
             if (teamJoined && !voteStarted) {
                 voteStarted = true;
@@ -78,6 +82,7 @@ public class BWTweaks extends Module {
     public void onUpdate() {
         if (fullNullCheck()) return;
 
+        // Ждём 20 тиков после входа в команду
         if (teamJoined && !voteStarted) {
             tickCounter++;
             if (tickCounter >= 20) {
@@ -104,7 +109,8 @@ public class BWTweaks extends Module {
                     clickSlot(screen, slot);
                     state = State.CLOSE_GUI_1;
                 } else {
-                    state = State.DONE;
+                    if (debug.getValue()) displayMessage("§c[BWTweaks] No GUI found, trying again");
+                    state = State.SELECTING_SLOT_5;
                 }
                 timer.reset();
                 break;
@@ -126,7 +132,7 @@ public class BWTweaks extends Module {
                     clickSlot(screen, 13);
                     state = State.CLOSE_GUI_2;
                 } else {
-                    state = State.DONE;
+                    state = State.SELECTING_SLOT_6;
                 }
                 timer.reset();
                 break;
@@ -148,7 +154,7 @@ public class BWTweaks extends Module {
                     clickSlot(screen, 15);
                     state = State.CLOSE_GUI_3;
                 } else {
-                    state = State.DONE;
+                    state = State.SELECTING_SLOT_7;
                 }
                 timer.reset();
                 break;
