@@ -1,9 +1,9 @@
 package thunder.hack.features.modules.misc;
 
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.gui.screen.ingame.GenericContainerScreen;
 import net.minecraft.network.packet.c2s.play.CloseHandledScreenC2SPacket;
 import net.minecraft.network.packet.c2s.play.PlayerInteractBlockC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerInteractItemC2SPacket;
 import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
 import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.text.Text;
@@ -19,7 +19,7 @@ public class BWTweaks extends Module {
         super("BWTweaks", Category.MISC);
     }
 
-    private final Setting<Integer> delay = new Setting<>("Delay", 500, 100, 2000);
+    private final Setting<Integer> delay = new Setting<>("Delay", 800, 100, 2000);
     private final Setting<PVPVersion> pvpVersion = new Setting<>("PVPVersion", PVPVersion.V1_8);
     private final Setting<Boolean> debug = new Setting<>("Debug", true);
 
@@ -28,18 +28,16 @@ public class BWTweaks extends Module {
     }
 
     private final Timer timer = new Timer();
-    private State state = State.IDLE;
-    private int tickCounter = 0;
+    private int step = 0;
     private boolean teamJoined = false;
-    private boolean voteStarted = false;
-
-    private enum State {
-        IDLE, WAITING, SELECTING_SLOT_5, CLICK_GUI_13, CLOSE_GUI_1, SELECTING_SLOT_6, CLICK_PVP, CLOSE_GUI_2, SELECTING_SLOT_7, CLICK_RES, CLOSE_GUI_3, DONE
-    }
+    private int tickCounter = 0;
 
     @Override
     public void onEnable() {
-        reset();
+        step = 0;
+        teamJoined = false;
+        tickCounter = 0;
+        timer.reset();
         if (debug.getValue()) displayMessage("§a[BWTweaks] Enabled");
     }
 
@@ -49,32 +47,10 @@ public class BWTweaks extends Module {
         if (!(e.getPacket() instanceof net.minecraft.network.packet.s2c.play.GameMessageS2CPacket packet)) return;
 
         String message = packet.content().getString();
-
-        if (debug.getValue()) {
-            displayMessage("§7[BWTweaks] Chat: §f" + message);
-        }
-
-        // Присоединились к команде (ищем часть строки, т.к. дальше идёт цвет команды)
         if (message.contains("Вы присоединились к команде")) {
             teamJoined = true;
             tickCounter = 0;
-            if (debug.getValue()) displayMessage("§a[BWTweaks] Team joined detected");
-            return;
-        }
-
-        // Линия разделитель — голосование отменяется (ищем часть строки)
-        if (message.contains("▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬")) {
-            voteStarted = false;
-            if (debug.getValue()) displayMessage("§c[BWTweaks] Vote cancelled by separator");
-            return;
-        }
-
-        // Голосование (ищем ключевые слова)
-        if (message.contains("Выберите версию PvP") || message.contains("выберите версию") || message.contains("голосование")) {
-            if (teamJoined && !voteStarted) {
-                voteStarted = true;
-                if (debug.getValue()) displayMessage("§a[BWTweaks] Vote detected, starting in 20 ticks");
-            }
+            if (debug.getValue()) displayMessage("§a[BWTweaks] Team joined");
         }
     }
 
@@ -82,120 +58,102 @@ public class BWTweaks extends Module {
     public void onUpdate() {
         if (fullNullCheck()) return;
 
-        // Ждём 20 тиков после входа в команду
-        if (teamJoined && !voteStarted) {
-            tickCounter++;
-            if (tickCounter >= 20) {
-                if (debug.getValue()) displayMessage("§a[BWTweaks] Starting vote sequence");
-                startVote();
-            }
-            return;
+        if (!teamJoined) return;
+
+        tickCounter++;
+        if (tickCounter < 20) return; // ждём 20 тиков
+
+        if (step == 0) {
+            if (debug.getValue()) displayMessage("§7[BWTweaks] Step 1: open shop");
+            selectSlot(4); // слот 5
+            step = 1;
+            timer.reset();
         }
-
-        if (state == State.IDLE) return;
-
-        if (!timer.passedMs(delay.getValue())) return;
-
-        switch (state) {
-            case SELECTING_SLOT_5:
-                selectSlot(4);
-                state = State.CLICK_GUI_13;
-                timer.reset();
-                break;
-
-            case CLICK_GUI_13:
-                if (mc.currentScreen instanceof GenericContainerScreen screen) {
-                    int slot = (pvpVersion.getValue() == PVPVersion.V1_8) ? 13 : 15;
-                    clickSlot(screen, slot);
-                    state = State.CLOSE_GUI_1;
-                } else {
-                    if (debug.getValue()) displayMessage("§c[BWTweaks] No GUI found, trying again");
-                    state = State.SELECTING_SLOT_5;
-                }
-                timer.reset();
-                break;
-
-            case CLOSE_GUI_1:
-                closeInventory();
-                state = State.SELECTING_SLOT_6;
-                timer.reset();
-                break;
-
-            case SELECTING_SLOT_6:
-                selectSlot(5);
-                state = State.CLICK_PVP;
-                timer.reset();
-                break;
-
-            case CLICK_PVP:
-                if (mc.currentScreen instanceof GenericContainerScreen screen) {
-                    clickSlot(screen, 13);
-                    state = State.CLOSE_GUI_2;
-                } else {
-                    state = State.SELECTING_SLOT_6;
-                }
-                timer.reset();
-                break;
-
-            case CLOSE_GUI_2:
-                closeInventory();
-                state = State.SELECTING_SLOT_7;
-                timer.reset();
-                break;
-
-            case SELECTING_SLOT_7:
-                selectSlot(6);
-                state = State.CLICK_RES;
-                timer.reset();
-                break;
-
-            case CLICK_RES:
-                if (mc.currentScreen instanceof GenericContainerScreen screen) {
-                    clickSlot(screen, 15);
-                    state = State.CLOSE_GUI_3;
-                } else {
-                    state = State.SELECTING_SLOT_7;
-                }
-                timer.reset();
-                break;
-
-            case CLOSE_GUI_3:
-                closeInventory();
-                state = State.DONE;
-                timer.reset();
-                break;
-
-            case DONE:
-                reset();
-                disable();
-                displayMessage("§a[BWTweaks] Vote completed!");
-                break;
+        
+        else if (step == 1 && timer.passedMs(delay.getValue())) {
+            if (debug.getValue()) displayMessage("§7[BWTweaks] Step 2: click PvP version");
+            int slot = (pvpVersion.getValue() == PVPVersion.V1_8) ? 13 : 15;
+            clickGuiSlot(slot);
+            step = 2;
+            timer.reset();
         }
-    }
-
-    private void startVote() {
-        state = State.SELECTING_SLOT_5;
-        timer.reset();
+        
+        else if (step == 2 && timer.passedMs(delay.getValue())) {
+            if (debug.getValue()) displayMessage("§7[BWTweaks] Step 3: close GUI");
+            closeInventory();
+            step = 3;
+            timer.reset();
+        }
+        
+        else if (step == 3 && timer.passedMs(delay.getValue())) {
+            if (debug.getValue()) displayMessage("§7[BWTweaks] Step 4: select slot 6");
+            selectSlot(5); // слот 6
+            step = 4;
+            timer.reset();
+        }
+        
+        else if (step == 4 && timer.passedMs(delay.getValue())) {
+            if (debug.getValue()) displayMessage("§7[BWTweaks] Step 5: click PvP mode");
+            clickGuiSlot(13);
+            step = 5;
+            timer.reset();
+        }
+        
+        else if (step == 5 && timer.passedMs(delay.getValue())) {
+            if (debug.getValue()) displayMessage("§7[BWTweaks] Step 6: close GUI");
+            closeInventory();
+            step = 6;
+            timer.reset();
+        }
+        
+        else if (step == 6 && timer.passedMs(delay.getValue())) {
+            if (debug.getValue()) displayMessage("§7[BWTweaks] Step 7: select slot 7");
+            selectSlot(6); // слот 7
+            step = 7;
+            timer.reset();
+        }
+        
+        else if (step == 7 && timer.passedMs(delay.getValue())) {
+            if (debug.getValue()) displayMessage("§7[BWTweaks] Step 8: click resources");
+            clickGuiSlot(15);
+            step = 8;
+            timer.reset();
+        }
+        
+        else if (step == 8 && timer.passedMs(delay.getValue())) {
+            if (debug.getValue()) displayMessage("§7[BWTweaks] Step 9: close GUI");
+            closeInventory();
+            step = 9;
+            timer.reset();
+        }
+        
+        else if (step == 9) {
+            if (debug.getValue()) displayMessage("§a[BWTweaks] Vote completed!");
+            disable();
+        }
     }
 
     private void selectSlot(int slot) {
         sendPacket(new UpdateSelectedSlotC2SPacket(slot));
         mc.player.getInventory().selectedSlot = slot;
         
-        if (mc.crosshairTarget instanceof BlockHitResult hit) {
-            sendSequencedPacket(id -> new PlayerInteractBlockC2SPacket(Hand.MAIN_HAND, hit, id));
-        }
+        // правый клик в воздухе
+        sendSequencedPacket(id -> new PlayerInteractItemC2SPacket(Hand.MAIN_HAND, id, mc.player.getYaw(), mc.player.getPitch()));
     }
 
-    private void clickSlot(GenericContainerScreen screen, int slot) {
-        mc.interactionManager.clickSlot(
-            screen.getScreenHandler().syncId,
-            slot,
-            0,
-            SlotActionType.PICKUP,
-            mc.player
-        );
-        if (debug.getValue()) displayMessage("§7[BWTweaks] Clicked slot " + slot);
+    private void clickGuiSlot(int slot) {
+        if (mc.currentScreen instanceof net.minecraft.client.gui.screen.ingame.GenericContainerScreen screen) {
+            mc.interactionManager.clickSlot(
+                screen.getScreenHandler().syncId,
+                slot,
+                0,
+                SlotActionType.PICKUP,
+                mc.player
+            );
+            if (debug.getValue()) displayMessage("§7[BWTweaks] Clicked slot " + slot);
+        } else {
+            if (debug.getValue()) displayMessage("§c[BWTweaks] No GUI found");
+        }
     }
 
     private void closeInventory() {
@@ -203,14 +161,6 @@ public class BWTweaks extends Module {
             sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
             mc.player.closeHandledScreen();
         }
-    }
-
-    private void reset() {
-        state = State.IDLE;
-        teamJoined = false;
-        voteStarted = false;
-        tickCounter = 0;
-        timer.reset();
     }
 
     private void displayMessage(String msg) {
