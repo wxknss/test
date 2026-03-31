@@ -3,7 +3,10 @@ package thunder.hack.features.modules.player;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.projectile.FireballEntity;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
 import net.minecraft.util.Hand;
+import net.minecraft.util.math.Vec3d;
 import thunder.hack.events.impl.PlayerUpdateEvent;
 import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
@@ -21,6 +24,7 @@ public class AntiFireball extends Module {
 
     private final Setting<Integer> cps = new Setting<>("CPS", 20, 1, 40);
     private final Setting<Float> range = new Setting<>("Range", 4.5f, 1f, 8f);
+    private final Setting<Boolean> ignoreWhenBlocking = new Setting<>("IgnoreWhenBlocking", true);
 
     private final Timer timer = new Timer();
     private FireballEntity target;
@@ -35,6 +39,10 @@ public class AntiFireball extends Module {
     @EventHandler
     public void onUpdate(PlayerUpdateEvent e) {
         if (fullNullCheck()) return;
+
+        if (ignoreWhenBlocking.getValue() && isBlocking()) {
+            return;
+        }
 
         updateTarget();
 
@@ -51,6 +59,19 @@ public class AntiFireball extends Module {
         }
         
         attacksThisTick = 0;
+    }
+
+    private boolean isBlocking() {
+        if (mc.player == null) return false;
+        
+        // Проверяем, зажат ли правый клик (использование предмета)
+        if (!mc.options.useKey.isPressed()) return false;
+        
+        // Проверяем, есть ли щит в любой руке
+        ItemStack mainHand = mc.player.getMainHandStack();
+        ItemStack offHand = mc.player.getOffHandStack();
+        
+        return (mainHand.getItem() == Items.SHIELD || offHand.getItem() == Items.SHIELD);
     }
 
     private void updateTarget() {
