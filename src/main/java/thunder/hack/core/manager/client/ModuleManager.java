@@ -187,7 +187,6 @@ public class ModuleManager implements IManager {
     public static AutoAuth autoAuth = new AutoAuth();
     public static AutoBuy autoBuy = new AutoBuy();
     public static AntiFireball antiFireball = new AntiFireball();
-    public static BWTweaks bwTweaks = new BWTweaks();
     public static ItemDropper itemDropper = new ItemDropper();
     public static ArmorHud armorHud = new ArmorHud();
     public static AirPlace airPlace = new AirPlace();
