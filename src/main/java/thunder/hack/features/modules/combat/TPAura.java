@@ -285,7 +285,7 @@ public class TPAura extends Module {
         return new float[]{(float) yaw, (float) pitch};
     }
 
-    private void displayMessage(String msg) {
+    private void sendMsg(String msg) {
         if (mc.player != null) {
             mc.player.sendMessage(net.minecraft.text.Text.literal(msg), false);
         }
