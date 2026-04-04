@@ -141,7 +141,6 @@ public class ModuleManager implements IManager {
     public static ViewModel viewModel = new ViewModel();
     public static TunnelEsp tunnelEsp = new TunnelEsp();
     public static PhantomBlocks phantomBlocks = new PhantomBlocks();
-    public static EntityRide entityRide = new EntityRide();
     public static TickShift tickShift = new TickShift();
     public static TargetHud targetHud = new TargetHud();
     public static SpeedMine speedMine = new SpeedMine();
