@@ -225,6 +225,7 @@ public class ModuleManager implements IManager {
     public static Tracers tracers = new Tracers();
     public static Parkour parkour = new Parkour();
     public static ClickTP clickTP = new ClickTP();
+    public static TPAura tpAura = new TPAura();
     public static BowPop bowPop = new BowPop();
     public static XCarry xCarry = new XCarry();
     public static Trails trails = new Trails();
