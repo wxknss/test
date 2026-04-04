@@ -101,9 +101,7 @@ public class TPAura extends Module {
         if (entity == mc.player) return false;
         if (!(entity instanceof LivingEntity)) return false;
         if (!entity.isAlive()) return false;
-        if (entity instanceof PlayerEntity player) {
-            if (player.isCreative()) return false;
-        }
+        if (entity instanceof PlayerEntity player && player.isCreative()) return false;
         if (mc.player.distanceTo(entity) > range.getValue()) return false;
         return true;
     }
@@ -283,11 +281,5 @@ public class TPAura extends Module {
         double pitch = -Math.toDegrees(Math.atan2(diffY, Math.hypot(diffX, diffZ)));
 
         return new float[]{(float) yaw, (float) pitch};
-    }
-
-    private void sendMsg(String msg) {
-        if (mc.player != null) {
-            mc.player.sendMessage(net.minecraft.text.Text.literal(msg), false);
-        }
     }
 }
