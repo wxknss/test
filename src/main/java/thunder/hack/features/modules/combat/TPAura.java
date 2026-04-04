@@ -22,21 +22,11 @@ public class TPAura extends Module {
     }
 
     // ===== ОСНОВНЫЕ НАСТРОЙКИ =====
-    private final Setting<Mode> mode = new Setting<>("Mode", Mode.Immediate);
     private final Setting<Float> range = new Setting<>("Range", 50f, 5f, 150f);
     private final Setting<Float> attackRange = new Setting<>("AttackRange", 3.5f, 1f, 6f);
     private final Setting<Integer> cps = new Setting<>("CPS", 10, 1, 20);
     private final Setting<Boolean> rotate = new Setting<>("Rotate", true);
-    
-    // ===== НАСТРОЙКИ ДЛЯ РАЗНЫХ РЕЖИМОВ =====
-    private final Setting<Integer> stickTicks = new Setting<>("StickTicks", 5, 1, 20, v -> mode.is(Mode.AStar));
-    private final Setting<Integer> tickDistance = new Setting<>("TickDistance", 3, 1, 10, v -> mode.is(Mode.AStar));
-    private final Setting<Integer> maxCost = new Setting<>("MaxCost", 250, 50, 500, v -> mode.is(Mode.AStar));
-    private final Setting<Integer> delay = new Setting<>("Delay", 1, 0, 5, v -> mode.is(Mode.Safe));
-    
-    // ===== 1.9 КУЛДАУН =====
-    private final Setting<Boolean> use19Cooldown = new Setting<>("Use1_9Cooldown", true);
-    private final Setting<Integer> cooldownTicks = new Setting<>("CooldownTicks", 20, 1, 40, v -> use19Cooldown.getValue());
+    private final Setting<Boolean> teleportBack = new Setting<>("TeleportBack", true);
     
     // ===== VANILLA DISABLER (из LiquidBounce) =====
     private final Setting<Boolean> vanillaDisabler = new Setting<>("VanillaDisabler", false);
@@ -48,78 +38,61 @@ public class TPAura extends Module {
     private final Setting<Boolean> adaptToFlight = new Setting<>("AdaptToFlight", true);
     private final Setting<Float> flightMultiplier = new Setting<>("FlightMultiplier", 5.0f, 1.0f, 15.0f, v -> adaptToFlight.getValue());
     
-    // ===== МЕТОДЫ ТЕЛЕПОРТА =====
-    private final Setting<TeleportMethod> teleportMethod = new Setting<>("TeleportMethod", TeleportMethod.Standard);
-    private final Setting<Boolean> teleportBack = new Setting<>("TeleportBack", true);
-    private final Setting<Integer> teleportDelay = new Setting<>("TeleportDelay", 0, 0, 10, v -> teleportMethod.is(TeleportMethod.Delayed));
-
-    public enum Mode {
-        Immediate, Instant, AStar, Safe
-    }
-    
-    public enum TeleportMethod {
-        Standard,      // обычный телепорт
-        PacketSpoof,   // спам пакетов перед телепортом
-        Delayed,       // с задержкой между пакетами
-        Blink          // с использованием Blink
-    }
+    // ===== КУЛДАУН ИЗ КИЛЛАУРЫ =====
+    private final Setting<Boolean> attackCooldown = new Setting<>("AttackCooldown", true);
+    private final Setting<Integer> attackTickLimit = new Setting<>("AttackTickLimit", 11, 0, 20, v -> attackCooldown.getValue());
 
     private final Timer timer = new Timer();
     private final Timer attackTimer = new Timer();
-    private final Timer cooldownTimer = new Timer();
     private Entity target;
     private Vec3d originalPos;
     private Vec3d teleportPos;
-    private List<Vec3d> path = new ArrayList<>();
-    private int pathIndex = 0;
-    private boolean teleporting = false;
-    private boolean returning = false;
-    private int stickCounter = 0;
-    private double lastDistance = 0;
+    private int hitTicks = 0;
 
     @Override
     public void onEnable() {
         target = null;
-        teleporting = false;
-        returning = false;
-        path.clear();
-        pathIndex = 0;
-        stickCounter = 0;
-        cooldownTimer.reset();
+        hitTicks = 0;
     }
 
     @EventHandler
     public void onUpdate(PlayerUpdateEvent e) {
         if (fullNullCheck()) return;
         
-        // 1.9 кулдаун
-        if (use19Cooldown.getValue() && !cooldownTimer.passedMs(cooldownTicks.getValue() * 50L)) {
+        // Кулдаун из KillAura
+        if (hitTicks > 0) {
+            hitTicks--;
             return;
         }
 
         updateTarget();
 
-        if (target == null) {
-            if (teleporting) {
-                returnToOriginal();
-            }
-            return;
+        if (target == null) return;
+
+        if (!timer.passedMs(1000 / cps.getValue())) return;
+
+        originalPos = mc.player.getPos();
+        teleportPos = getTeleportPosition(target, getDynamicAttackRange());
+
+        if (teleportPos == null) return;
+
+        // Vanilla Disabler (перед телепортом спамим пакеты)
+        if (vanillaDisabler.getValue()) {
+            sendVanillaPackets();
         }
 
-        switch (mode.getValue()) {
-            case Immediate:
-                doImmediate();
-                break;
-            case Instant:
-                doInstant();
-                break;
-            case AStar:
-                doAStar();
-                break;
-            case Safe:
-                doSafe();
-                break;
+        // PacketSpoof (всегда включён)
+        sendSpoofPackets();
+        
+        teleportTo(teleportPos);
+        attack();
+        
+        if (teleportBack.getValue()) {
+            teleportTo(originalPos);
         }
+        
+        hitTicks = attackTickLimit.getValue();
+        timer.reset();
     }
 
     private void updateTarget() {
@@ -143,6 +116,10 @@ public class TPAura extends Module {
         
         float currentRange = getDynamicRange();
         if (mc.player.distanceTo(entity) > currentRange) return false;
+        
+        // Проверка на стену (если за стеной — пропускаем)
+        if (!mc.player.canSee(entity)) return false;
+        
         return true;
     }
     
@@ -168,148 +145,7 @@ public class TPAura extends Module {
         return baseRange;
     }
 
-    private void doImmediate() {
-        if (!timer.passedMs(1000 / cps.getValue())) return;
-        if (teleporting) return;
-
-        originalPos = mc.player.getPos();
-        teleportPos = getTeleportPosition(target, getDynamicAttackRange());
-
-        if (teleportPos == null) return;
-
-        // Vanilla Disabler (перед телепортом спамим пакеты)
-        if (vanillaDisabler.getValue()) {
-            sendVanillaPackets();
-        }
-
-        teleportTo(teleportPos);
-        teleporting = true;
-        
-        if (use19Cooldown.getValue()) {
-            cooldownTimer.reset();
-        }
-        timer.reset();
-    }
-
-    private void doInstant() {
-        if (!timer.passedMs(1000 / cps.getValue())) return;
-
-        originalPos = mc.player.getPos();
-        teleportPos = getTeleportPosition(target, getDynamicAttackRange());
-
-        if (teleportPos == null) return;
-
-        // Vanilla Disabler
-        if (vanillaDisabler.getValue()) {
-            sendVanillaPackets();
-        }
-
-        // Выбор метода телепорта
-        switch (teleportMethod.getValue()) {
-            case PacketSpoof:
-                sendSpoofPackets();
-                break;
-            case Delayed:
-                sendDelayedPackets();
-                break;
-            case Blink:
-                sendBlinkTeleport();
-                break;
-            default:
-                teleportTo(teleportPos);
-        }
-        
-        attack();
-        
-        if (teleportBack.getValue()) {
-            teleportTo(originalPos);
-        }
-        
-        if (use19Cooldown.getValue()) {
-            cooldownTimer.reset();
-        }
-        timer.reset();
-    }
-
-    private void doAStar() {
-        if (teleporting) {
-            if (returning) {
-                if (pathIndex < path.size()) {
-                    teleportTo(path.get(pathIndex));
-                    pathIndex++;
-                } else {
-                    teleporting = false;
-                    returning = false;
-                    path.clear();
-                    pathIndex = 0;
-                    if (use19Cooldown.getValue()) {
-                        cooldownTimer.reset();
-                    }
-                }
-            } else {
-                if (pathIndex < path.size()) {
-                    teleportTo(path.get(pathIndex));
-                    pathIndex++;
-                } else {
-                    attack();
-                    stickCounter++;
-                    if (stickCounter >= stickTicks.getValue()) {
-                        returning = true;
-                        pathIndex = 0;
-                        List<Vec3d> reversed = new ArrayList<>(path);
-                        java.util.Collections.reverse(reversed);
-                        path = reversed;
-                        stickCounter = 0;
-                        if (use19Cooldown.getValue()) {
-                            cooldownTimer.reset();
-                        }
-                    }
-                }
-            }
-            timer.reset();
-            return;
-        }
-
-        originalPos = mc.player.getPos();
-        teleportPos = getTeleportPosition(target, getDynamicAttackRange());
-        
-        if (teleportPos == null) return;
-        
-        path = buildPath(originalPos, teleportPos);
-        if (path.isEmpty()) return;
-        
-        teleporting = true;
-        returning = false;
-        pathIndex = 0;
-    }
-
-    private void doSafe() {
-        if (!timer.passedMs(1000 / cps.getValue() + delay.getValue() * 50L)) return;
-        if (teleporting) return;
-
-        originalPos = mc.player.getPos();
-        teleportPos = getTeleportPosition(target, getDynamicAttackRange());
-
-        if (teleportPos == null) return;
-
-        teleportTo(teleportPos);
-        teleporting = true;
-        
-        mc.execute(() -> {
-            attack();
-            if (teleportBack.getValue()) {
-                teleportTo(originalPos);
-            }
-            teleporting = false;
-            if (use19Cooldown.getValue()) {
-                cooldownTimer.reset();
-            }
-        });
-        timer.reset();
-    }
-
     private void sendVanillaPackets() {
-        // Аналог VanillaSpeed Disabler из LiquidBounce
         double distance = Math.sqrt(
             Math.pow(mc.player.getX() - mc.player.prevX, 2) +
             Math.pow(mc.player.getY() - mc.player.prevY, 2) +
@@ -324,7 +160,6 @@ public class TPAura extends Module {
     }
     
     private void sendSpoofPackets() {
-        // Спам пакетами перед телепортом (обходит некоторые античиты)
         for (int i = 0; i < 5; i++) {
             sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(
                 mc.player.getX(),
@@ -333,36 +168,6 @@ public class TPAura extends Module {
                 true
             ));
         }
-        teleportTo(teleportPos);
-    }
-    
-    private void sendDelayedPackets() {
-        // Отправка пакетов с задержкой
-        new Thread(() -> {
-            try {
-                Thread.sleep(teleportDelay.getValue() * 10L);
-                teleportTo(teleportPos);
-            } catch (InterruptedException ignored) {}
-        }).start();
-    }
-    
-    private void sendBlinkTeleport() {
-        // Использование Blink модуля для телепорта
-        if (ModuleManager.blink.isEnabled()) {
-            teleportTo(teleportPos);
-        } else {
-            teleportTo(teleportPos);
-        }
-    }
-
-    private void returnToOriginal() {
-        if (originalPos != null && teleportBack.getValue()) {
-            teleportTo(originalPos);
-        }
-        teleporting = false;
-        returning = false;
-        path.clear();
-        pathIndex = 0;
     }
 
     private void teleportTo(Vec3d pos) {
@@ -390,26 +195,6 @@ public class TPAura extends Module {
 
     private boolean isPositionSafe(Vec3d pos) {
         return !mc.world.getBlockCollisions(mc.player, mc.player.getBoundingBox().offset(pos.subtract(mc.player.getPos()))).iterator().hasNext();
-    }
-
-    private List<Vec3d> buildPath(Vec3d from, Vec3d to) {
-        List<Vec3d> points = new ArrayList<>();
-        double distance = from.distanceTo(to);
-        int steps = (int) Math.ceil(distance / tickDistance.getValue());
-        
-        if (steps > maxCost.getValue()) {
-            steps = maxCost.getValue();
-        }
-        
-        for (int i = 1; i <= steps; i++) {
-            double t = (double) i / steps;
-            double x = from.x + (to.x - from.x) * t;
-            double y = from.y + (to.y - from.y) * t;
-            double z = from.z + (to.z - from.z) * t;
-            points.add(new Vec3d(x, y, z));
-        }
-        
-        return points;
     }
 
     private void attack() {
