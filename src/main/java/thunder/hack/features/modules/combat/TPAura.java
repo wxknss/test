@@ -5,14 +5,11 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
-import thunder.hack.events.impl.PacketEvent;
 import thunder.hack.events.impl.PlayerUpdateEvent;
 import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
 import thunder.hack.utility.Timer;
-import thunder.hack.utility.player.PlayerUtility;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -34,10 +31,7 @@ public class TPAura extends Module {
     private final Setting<Integer> delay = new Setting<>("Delay", 1, 0, 5, v -> mode.is(Mode.Safe));
 
     public enum Mode {
-        Immediate,   // Мгновенный телепорт туда и обратно (с задержкой)
-        Instant,     // Телепорт, атака, возврат в один тик
-        AStar,       // Плавный телепорт с поиском пути
-        Safe         // С задержкой между телепортами
+        Immediate, Instant, AStar, Safe
     }
 
     private final Timer timer = new Timer();
@@ -109,13 +103,11 @@ public class TPAura extends Module {
         if (!entity.isAlive()) return false;
         if (entity instanceof PlayerEntity player) {
             if (player.isCreative()) return false;
-            if (Managers.FRIEND.isFriend(player)) return false;
         }
         if (mc.player.distanceTo(entity) > range.getValue()) return false;
         return true;
     }
 
-    // ===== IMMEDIATE MODE =====
     private void doImmediate() {
         if (!timer.passedMs(1000 / cps.getValue())) return;
         if (teleporting) return;
@@ -125,13 +117,11 @@ public class TPAura extends Module {
 
         if (teleportPos == null) return;
 
-        // Телепорт к цели
         teleportTo(teleportPos);
         teleporting = true;
         timer.reset();
     }
 
-    // ===== INSTANT MODE (один тик туда-обратно) =====
     private void doInstant() {
         if (!timer.passedMs(1000 / cps.getValue())) return;
 
@@ -140,19 +130,12 @@ public class TPAura extends Module {
 
         if (teleportPos == null) return;
 
-        // Телепорт к цели
         teleportTo(teleportPos);
-        
-        // Атака в том же тике
         attack();
-        
-        // Возврат в том же тике
         teleportTo(originalPos);
-        
         timer.reset();
     }
 
-    // ===== ASTAR MODE (плавный телепорт) =====
     private void doAStar() {
         if (teleporting) {
             if (returning) {
@@ -160,7 +143,6 @@ public class TPAura extends Module {
                     teleportTo(path.get(pathIndex));
                     pathIndex++;
                 } else {
-                    // Возврат завершён
                     teleporting = false;
                     returning = false;
                     path.clear();
@@ -171,15 +153,11 @@ public class TPAura extends Module {
                     teleportTo(path.get(pathIndex));
                     pathIndex++;
                 } else {
-                    // Достигли цели, атакуем
                     attack();
-                    // Ждём stickTicks тиков
                     stickCounter++;
                     if (stickCounter >= stickTicks.getValue()) {
-                        // Начинаем возврат
                         returning = true;
                         pathIndex = 0;
-                        // Разворачиваем путь для возврата
                         List<Vec3d> reversed = new ArrayList<>(path);
                         java.util.Collections.reverse(reversed);
                         path = reversed;
@@ -191,7 +169,6 @@ public class TPAura extends Module {
             return;
         }
 
-        // Построение пути
         originalPos = mc.player.getPos();
         teleportPos = getTeleportPosition(target);
         
@@ -205,7 +182,6 @@ public class TPAura extends Module {
         pathIndex = 0;
     }
 
-    // ===== SAFE MODE (с задержкой между телепортами) =====
     private void doSafe() {
         if (!timer.passedMs(1000 / cps.getValue() + delay.getValue() * 50L)) return;
         if (teleporting) return;
@@ -218,7 +194,6 @@ public class TPAura extends Module {
         teleportTo(teleportPos);
         teleporting = true;
         
-        // Атака через пару тиков
         mc.execute(() -> {
             attack();
             teleportTo(originalPos);
@@ -308,5 +283,11 @@ public class TPAura extends Module {
         double pitch = -Math.toDegrees(Math.atan2(diffY, Math.hypot(diffX, diffZ)));
 
         return new float[]{(float) yaw, (float) pitch};
+    }
+
+    private void displayMessage(String msg) {
+        if (mc.player != null) {
+            mc.player.sendMessage(net.minecraft.text.Text.literal(msg), false);
+        }
     }
 }
