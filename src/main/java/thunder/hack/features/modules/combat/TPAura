@@ -5,14 +5,14 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.Hand;
 import net.minecraft.util.math.Vec3d;
-import thunder.hack.events.impl.PacketEvent;
+import thunder.hack.core.Managers;
+import thunder.hack.core.manager.client.ModuleManager;
 import thunder.hack.events.impl.PlayerUpdateEvent;
 import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
 import thunder.hack.utility.Timer;
-import thunder.hack.utility.player.PlayerUtility;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -23,42 +23,51 @@ public class TPAura extends Module {
         super("TPAura", Category.COMBAT);
     }
 
-    private final Setting<Mode> mode = new Setting<>("Mode", Mode.Immediate);
+    // ===== ОСНОВНЫЕ НАСТРОЙКИ =====
     private final Setting<Float> range = new Setting<>("Range", 50f, 5f, 150f);
     private final Setting<Float> attackRange = new Setting<>("AttackRange", 3.5f, 1f, 6f);
-    private final Setting<Integer> cps = new Setting<>("CPS", 10, 1, 20);
     private final Setting<Boolean> rotate = new Setting<>("Rotate", true);
-    private final Setting<Integer> stickTicks = new Setting<>("StickTicks", 5, 1, 20, v -> mode.is(Mode.AStar));
-    private final Setting<Integer> tickDistance = new Setting<>("TickDistance", 3, 1, 10, v -> mode.is(Mode.AStar));
-    private final Setting<Integer> maxCost = new Setting<>("MaxCost", 250, 50, 500, v -> mode.is(Mode.AStar));
-    private final Setting<Integer> delay = new Setting<>("Delay", 1, 0, 5, v -> mode.is(Mode.Safe));
+    private final Setting<Boolean> teleportBack = new Setting<>("TeleportBack", true);
+    
+    // ===== КУЛДАУН =====
+    private final Setting<Boolean> cooldown = new Setting<>("Cooldown", true);
+    
+    // ===== РУКА ДЛЯ АТАКИ =====
+    private final Setting<AttackHand> attackHand = new Setting<>("AttackHand", AttackHand.MainHand);
+    
+    // ===== VANILLA DISABLER =====
+    private final Setting<Boolean> vanillaDisabler = new Setting<>("VanillaDisabler", false);
+    private final Setting<Float> distancePerPacket = new Setting<>("DistancePerPacket", 10f, 1f, 20f, v -> vanillaDisabler.getValue());
+    
+    // ===== АДАПТАЦИЯ ПОД FLIGHT/SPEED =====
+    private final Setting<Boolean> adaptToSpeed = new Setting<>("AdaptToSpeed", true);
+    private final Setting<Float> speedMultiplier = new Setting<>("SpeedMultiplier", 3.0f, 1.0f, 10.0f, v -> adaptToSpeed.getValue());
+    private final Setting<Boolean> adaptToFlight = new Setting<>("AdaptToFlight", true);
+    private final Setting<Float> flightMultiplier = new Setting<>("FlightMultiplier", 5.0f, 1.0f, 15.0f, v -> adaptToFlight.getValue());
+    
+    // ===== НАСТРОЙКИ ЦЕЛЕЙ =====
+    private final Setting<Sort> sort = new Setting<>("Sort", Sort.LowestDistance);
+    private final Setting<Boolean> players = new Setting<>("Players", true);
+    private final Setting<Boolean> ignoreInvisible = new Setting<>("IgnoreInvisible", false);
+    private final Setting<Boolean> ignoreCreative = new Setting<>("IgnoreCreative", true);
+    private final Setting<Boolean> ignoreNaked = new Setting<>("IgnoreNaked", false);
 
-    public enum Mode {
-        Immediate,   // Мгновенный телепорт туда и обратно (с задержкой)
-        Instant,     // Телепорт, атака, возврат в один тик
-        AStar,       // Плавный телепорт с поиском пути
-        Safe         // С задержкой между телепортами
+    public enum Sort {
+        LowestDistance, HighestDistance, LowestHealth, HighestHealth, FOV
+    }
+    
+    public enum AttackHand {
+        MainHand, OffHand, None
     }
 
     private final Timer timer = new Timer();
-    private final Timer attackTimer = new Timer();
     private Entity target;
     private Vec3d originalPos;
     private Vec3d teleportPos;
-    private List<Vec3d> path = new ArrayList<>();
-    private int pathIndex = 0;
-    private boolean teleporting = false;
-    private boolean returning = false;
-    private int stickCounter = 0;
 
     @Override
     public void onEnable() {
         target = null;
-        teleporting = false;
-        returning = false;
-        path.clear();
-        pathIndex = 0;
-        stickCounter = 0;
     }
 
     @EventHandler
@@ -67,27 +76,38 @@ public class TPAura extends Module {
 
         updateTarget();
 
-        if (target == null) {
-            if (teleporting) {
-                returnToOriginal();
-            }
+        if (target == null) return;
+
+        if (cooldown.getValue() && !isWeaponReady()) {
             return;
         }
 
-        switch (mode.getValue()) {
-            case Immediate:
-                doImmediate();
-                break;
-            case Instant:
-                doInstant();
-                break;
-            case AStar:
-                doAStar();
-                break;
-            case Safe:
-                doSafe();
-                break;
+        if (!timer.passedMs(20)) return;
+
+        originalPos = mc.player.getPos();
+        teleportPos = getTeleportPosition(target, getDynamicAttackRange());
+
+        if (teleportPos == null) return;
+
+        if (vanillaDisabler.getValue()) {
+            sendVanillaPackets();
         }
+
+        sendSpoofPackets();
+        
+        teleportTo(teleportPos);
+        attack();
+        
+        if (teleportBack.getValue()) {
+            teleportTo(originalPos);
+        }
+        
+        timer.reset();
+    }
+
+    private boolean isWeaponReady() {
+        float attackCooldown = mc.player.getAttackCooldownProgress(0.5f);
+        return attackCooldown >= 1.0f;
     }
 
     private void updateTarget() {
@@ -98,143 +118,110 @@ public class TPAura extends Module {
             }
         }
 
-        target = entities.stream()
-                .min(Comparator.comparingDouble(e -> mc.player.squaredDistanceTo(e)))
-                .orElse(null);
+        if (entities.isEmpty()) {
+            target = null;
+            return;
+        }
+
+        switch (sort.getValue()) {
+            case LowestDistance:
+                target = entities.stream().min(Comparator.comparingDouble(e -> mc.player.squaredDistanceTo(e))).orElse(null);
+                break;
+            case HighestDistance:
+                target = entities.stream().max(Comparator.comparingDouble(e -> mc.player.squaredDistanceTo(e))).orElse(null);
+                break;
+            case LowestHealth:
+                target = entities.stream().min(Comparator.comparingDouble(e -> getHealth(e))).orElse(null);
+                break;
+            case HighestHealth:
+                target = entities.stream().max(Comparator.comparingDouble(e -> getHealth(e))).orElse(null);
+                break;
+            case FOV:
+                target = entities.stream().min(Comparator.comparingDouble(this::getFOVAngle)).orElse(null);
+                break;
+        }
+    }
+
+    private double getHealth(Entity entity) {
+        if (entity instanceof LivingEntity living) {
+            return living.getHealth() + living.getAbsorptionAmount();
+        }
+        return 0;
+    }
+
+    private double getFOVAngle(Entity entity) {
+        double diffX = entity.getX() - mc.player.getX();
+        double diffZ = entity.getZ() - mc.player.getZ();
+        float yaw = (float) Math.toDegrees(Math.atan2(diffZ, diffX)) - 90;
+        return Math.abs(yaw - mc.player.getYaw());
     }
 
     private boolean isValidTarget(Entity entity) {
         if (entity == mc.player) return false;
         if (!(entity instanceof LivingEntity)) return false;
         if (!entity.isAlive()) return false;
+        
         if (entity instanceof PlayerEntity player) {
-            if (player.isCreative()) return false;
+            if (!players.getValue()) return false;
             if (Managers.FRIEND.isFriend(player)) return false;
+            if (ignoreCreative.getValue() && player.isCreative()) return false;
+            if (ignoreInvisible.getValue() && player.isInvisible()) return false;
+            if (ignoreNaked.getValue() && player.getArmor() == 0) return false;
         }
-        if (mc.player.distanceTo(entity) > range.getValue()) return false;
+        
+        float currentRange = getDynamicRange();
+        if (mc.player.distanceTo(entity) > currentRange) return false;
+        
+        if (!mc.player.canSee(entity)) return false;
+        
         return true;
     }
-
-    // ===== IMMEDIATE MODE =====
-    private void doImmediate() {
-        if (!timer.passedMs(1000 / cps.getValue())) return;
-        if (teleporting) return;
-
-        originalPos = mc.player.getPos();
-        teleportPos = getTeleportPosition(target);
-
-        if (teleportPos == null) return;
-
-        // Телепорт к цели
-        teleportTo(teleportPos);
-        teleporting = true;
-        timer.reset();
-    }
-
-    // ===== INSTANT MODE (один тик туда-обратно) =====
-    private void doInstant() {
-        if (!timer.passedMs(1000 / cps.getValue())) return;
-
-        originalPos = mc.player.getPos();
-        teleportPos = getTeleportPosition(target);
-
-        if (teleportPos == null) return;
-
-        // Телепорт к цели
-        teleportTo(teleportPos);
-        
-        // Атака в том же тике
-        attack();
-        
-        // Возврат в том же тике
-        teleportTo(originalPos);
-        
-        timer.reset();
-    }
-
-    // ===== ASTAR MODE (плавный телепорт) =====
-    private void doAStar() {
-        if (teleporting) {
-            if (returning) {
-                if (pathIndex < path.size()) {
-                    teleportTo(path.get(pathIndex));
-                    pathIndex++;
-                } else {
-                    // Возврат завершён
-                    teleporting = false;
-                    returning = false;
-                    path.clear();
-                    pathIndex = 0;
-                }
-            } else {
-                if (pathIndex < path.size()) {
-                    teleportTo(path.get(pathIndex));
-                    pathIndex++;
-                } else {
-                    // Достигли цели, атакуем
-                    attack();
-                    // Ждём stickTicks тиков
-                    stickCounter++;
-                    if (stickCounter >= stickTicks.getValue()) {
-                        // Начинаем возврат
-                        returning = true;
-                        pathIndex = 0;
-                        // Разворачиваем путь для возврата
-                        List<Vec3d> reversed = new ArrayList<>(path);
-                        java.util.Collections.reverse(reversed);
-                        path = reversed;
-                        stickCounter = 0;
-                    }
-                }
-            }
-            timer.reset();
-            return;
+    
+    private float getDynamicRange() {
+        float baseRange = range.getValue();
+        if (adaptToSpeed.getValue() && ModuleManager.speed.isEnabled()) {
+            baseRange *= speedMultiplier.getValue();
         }
-
-        // Построение пути
-        originalPos = mc.player.getPos();
-        teleportPos = getTeleportPosition(target);
-        
-        if (teleportPos == null) return;
-        
-        path = buildPath(originalPos, teleportPos);
-        if (path.isEmpty()) return;
-        
-        teleporting = true;
-        returning = false;
-        pathIndex = 0;
-    }
-
-    // ===== SAFE MODE (с задержкой между телепортами) =====
-    private void doSafe() {
-        if (!timer.passedMs(1000 / cps.getValue() + delay.getValue() * 50L)) return;
-        if (teleporting) return;
-
-        originalPos = mc.player.getPos();
-        teleportPos = getTeleportPosition(target);
-
-        if (teleportPos == null) return;
-
-        teleportTo(teleportPos);
-        teleporting = true;
-        
-        // Атака через пару тиков
-        mc.execute(() -> {
-            attack();
-            teleportTo(originalPos);
-            teleporting = false;
-        });
-        timer.reset();
-    }
-
-    private void returnToOriginal() {
-        if (originalPos != null) {
-            teleportTo(originalPos);
+        if (adaptToFlight.getValue() && ModuleManager.flight.isEnabled()) {
+            baseRange *= flightMultiplier.getValue();
         }
-        teleporting = false;
-        returning = false;
-        path.clear();
-        pathIndex = 0;
+        return baseRange;
+    }
+    
+    private float getDynamicAttackRange() {
+        float baseRange = attackRange.getValue();
+        if (adaptToSpeed.getValue() && ModuleManager.speed.isEnabled()) {
+            baseRange *= speedMultiplier.getValue();
+        }
+        if (adaptToFlight.getValue() && ModuleManager.flight.isEnabled()) {
+            baseRange *= flightMultiplier.getValue();
+        }
+        return baseRange;
+    }
+
+    private void sendVanillaPackets() {
+        double distance = Math.sqrt(
+            Math.pow(mc.player.getX() - mc.player.prevX, 2) +
+            Math.pow(mc.player.getY() - mc.player.prevY, 2) +
+            Math.pow(mc.player.getZ() - mc.player.prevZ, 2)
+        );
+        
+        int packets = (int) (distance / distancePerPacket.getValue());
+        
+        for (int i = 0; i < packets; i++) {
+            sendPacket(new PlayerMoveC2SPacket.OnGroundOnly(true));
+        }
+    }
+    
+    private void sendSpoofPackets() {
+        for (int i = 0; i < 5; i++) {
+            sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(
+                mc.player.getX(),
+                mc.player.getY() + 0.001 * i,
+                mc.player.getZ(),
+                true
+            ));
+        }
     }
 
     private void teleportTo(Vec3d pos) {
@@ -242,12 +229,12 @@ public class TPAura extends Module {
         sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(pos.x, pos.y, pos.z, false));
     }
 
-    private Vec3d getTeleportPosition(Entity target) {
+    private Vec3d getTeleportPosition(Entity target, float range) {
         double yawRad = Math.toRadians(mc.player.getYaw());
         double directionX = -Math.sin(yawRad);
         double directionZ = Math.cos(yawRad);
 
-        for (double r = 1.5; r <= attackRange.getValue(); r += 0.5) {
+        for (double r = 1.5; r <= range; r += 0.5) {
             Vec3d pos = new Vec3d(
                 target.getX() + directionX * r,
                 target.getY(),
@@ -264,26 +251,6 @@ public class TPAura extends Module {
         return !mc.world.getBlockCollisions(mc.player, mc.player.getBoundingBox().offset(pos.subtract(mc.player.getPos()))).iterator().hasNext();
     }
 
-    private List<Vec3d> buildPath(Vec3d from, Vec3d to) {
-        List<Vec3d> points = new ArrayList<>();
-        double distance = from.distanceTo(to);
-        int steps = (int) Math.ceil(distance / tickDistance.getValue());
-        
-        if (steps > maxCost.getValue()) {
-            steps = maxCost.getValue();
-        }
-        
-        for (int i = 1; i <= steps; i++) {
-            double t = (double) i / steps;
-            double x = from.x + (to.x - from.x) * t;
-            double y = from.y + (to.y - from.y) * t;
-            double z = from.z + (to.z - from.z) * t;
-            points.add(new Vec3d(x, y, z));
-        }
-        
-        return points;
-    }
-
     private void attack() {
         if (target == null) return;
 
@@ -292,9 +259,19 @@ public class TPAura extends Module {
             sendPacket(new PlayerMoveC2SPacket.LookAndOnGround(rotations[0], rotations[1], mc.player.isOnGround()));
         }
 
-        mc.interactionManager.attackEntity(mc.player, target);
-        mc.player.swingHand(net.minecraft.util.Hand.MAIN_HAND);
-        attackTimer.reset();
+        switch (attackHand.getValue()) {
+            case OffHand:
+                mc.interactionManager.attackEntity(mc.player, target);
+                mc.player.swingHand(Hand.OFF_HAND);
+                break;
+            case MainHand:
+                mc.interactionManager.attackEntity(mc.player, target);
+                mc.player.swingHand(Hand.MAIN_HAND);
+                break;
+            case None:
+                mc.interactionManager.attackEntity(mc.player, target);
+                break;
+        }
     }
 
     private float[] getRotations(Entity target) {
