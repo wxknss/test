@@ -4,13 +4,18 @@ import meteordevelopment.orbit.EventHandler;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.SwordItem;
+import net.minecraft.item.AxeItem;
+import net.minecraft.item.TridentItem;
 import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
+import net.minecraft.util.Hand;
 import net.minecraft.util.math.Vec3d;
 import thunder.hack.core.manager.client.ModuleManager;
 import thunder.hack.events.impl.PlayerUpdateEvent;
 import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
 import thunder.hack.utility.Timer;
+import thunder.hack.utility.player.InventoryUtility;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -24,11 +29,16 @@ public class TPAura extends Module {
     // ===== ОСНОВНЫЕ НАСТРОЙКИ =====
     private final Setting<Float> range = new Setting<>("Range", 50f, 5f, 150f);
     private final Setting<Float> attackRange = new Setting<>("AttackRange", 3.5f, 1f, 6f);
-    private final Setting<Integer> cps = new Setting<>("CPS", 10, 1, 20);
     private final Setting<Boolean> rotate = new Setting<>("Rotate", true);
     private final Setting<Boolean> teleportBack = new Setting<>("TeleportBack", true);
     
-    // ===== VANILLA DISABLER (из LiquidBounce) =====
+    // ===== КУЛДАУН (автоматический для 1.9+) =====
+    private final Setting<Boolean> cooldown = new Setting<>("Cooldown", true);
+    
+    // ===== РУКА ДЛЯ АТАКИ =====
+    private final Setting<AttackHand> attackHand = new Setting<>("AttackHand", AttackHand.MainHand);
+    
+    // ===== VANILLA DISABLER =====
     private final Setting<Boolean> vanillaDisabler = new Setting<>("VanillaDisabler", false);
     private final Setting<Float> distancePerPacket = new Setting<>("DistancePerPacket", 10f, 1f, 20f, v -> vanillaDisabler.getValue());
     
@@ -38,50 +48,55 @@ public class TPAura extends Module {
     private final Setting<Boolean> adaptToFlight = new Setting<>("AdaptToFlight", true);
     private final Setting<Float> flightMultiplier = new Setting<>("FlightMultiplier", 5.0f, 1.0f, 15.0f, v -> adaptToFlight.getValue());
     
-    // ===== КУЛДАУН ИЗ КИЛЛАУРЫ =====
-    private final Setting<Boolean> attackCooldown = new Setting<>("AttackCooldown", true);
-    private final Setting<Integer> attackTickLimit = new Setting<>("AttackTickLimit", 11, 0, 20, v -> attackCooldown.getValue());
+    // ===== НАСТРОЙКИ ЦЕЛЕЙ =====
+    private final Setting<Sort> sort = new Setting<>("Sort", Sort.LowestDistance);
+    private final Setting<Boolean> players = new Setting<>("Players", true);
+    private final Setting<Boolean> ignoreInvisible = new Setting<>("IgnoreInvisible", false);
+    private final Setting<Boolean> ignoreCreative = new Setting<>("IgnoreCreative", true);
+    private final Setting<Boolean> ignoreNaked = new Setting<>("IgnoreNaked", false);
+
+    public enum Sort {
+        LowestDistance, HighestDistance, LowestHealth, HighestHealth, FOV
+    }
+    
+    public enum AttackHand {
+        MainHand, OffHand, None
+    }
 
     private final Timer timer = new Timer();
-    private final Timer attackTimer = new Timer();
     private Entity target;
     private Vec3d originalPos;
     private Vec3d teleportPos;
-    private int hitTicks = 0;
 
     @Override
     public void onEnable() {
         target = null;
-        hitTicks = 0;
     }
 
     @EventHandler
     public void onUpdate(PlayerUpdateEvent e) {
         if (fullNullCheck()) return;
-        
-        // Кулдаун из KillAura
-        if (hitTicks > 0) {
-            hitTicks--;
-            return;
-        }
 
         updateTarget();
 
         if (target == null) return;
 
-        if (!timer.passedMs(1000 / cps.getValue())) return;
+        // Кулдаун (автоматический, как в KillAura)
+        if (cooldown.getValue() && !isWeaponReady()) {
+            return;
+        }
+
+        if (!timer.passedMs(20)) return;
 
         originalPos = mc.player.getPos();
         teleportPos = getTeleportPosition(target, getDynamicAttackRange());
 
         if (teleportPos == null) return;
 
-        // Vanilla Disabler (перед телепортом спамим пакеты)
         if (vanillaDisabler.getValue()) {
             sendVanillaPackets();
         }
 
-        // PacketSpoof (всегда включён)
         sendSpoofPackets();
         
         teleportTo(teleportPos);
@@ -91,8 +106,14 @@ public class TPAura extends Module {
             teleportTo(originalPos);
         }
         
-        hitTicks = attackTickLimit.getValue();
         timer.reset();
+    }
+
+    private boolean isWeaponReady() {
+        // Автоматический кулдаун как в KillAura
+        // Возвращает true если оружие готово к атаке
+        float attackCooldown = mc.player.getAttackCooldownProgress(0.5f);
+        return attackCooldown >= 1.0f;
     }
 
     private void updateTarget() {
@@ -103,21 +124,60 @@ public class TPAura extends Module {
             }
         }
 
-        target = entities.stream()
-                .min(Comparator.comparingDouble(e -> mc.player.squaredDistanceTo(e)))
-                .orElse(null);
+        if (entities.isEmpty()) {
+            target = null;
+            return;
+        }
+
+        switch (sort.getValue()) {
+            case LowestDistance:
+                target = entities.stream().min(Comparator.comparingDouble(e -> mc.player.squaredDistanceTo(e))).orElse(null);
+                break;
+            case HighestDistance:
+                target = entities.stream().max(Comparator.comparingDouble(e -> mc.player.squaredDistanceTo(e))).orElse(null);
+                break;
+            case LowestHealth:
+                target = entities.stream().min(Comparator.comparingDouble(e -> getHealth(e))).orElse(null);
+                break;
+            case HighestHealth:
+                target = entities.stream().max(Comparator.comparingDouble(e -> getHealth(e))).orElse(null);
+                break;
+            case FOV:
+                target = entities.stream().min(Comparator.comparingDouble(this::getFOVAngle)).orElse(null);
+                break;
+        }
+    }
+
+    private double getHealth(Entity entity) {
+        if (entity instanceof LivingEntity living) {
+            return living.getHealth() + living.getAbsorptionAmount();
+        }
+        return 0;
+    }
+
+    private double getFOVAngle(Entity entity) {
+        double diffX = entity.getX() - mc.player.getX();
+        double diffZ = entity.getZ() - mc.player.getZ();
+        float yaw = (float) Math.toDegrees(Math.atan2(diffZ, diffX)) - 90;
+        return Math.abs(yaw - mc.player.getYaw());
     }
 
     private boolean isValidTarget(Entity entity) {
         if (entity == mc.player) return false;
         if (!(entity instanceof LivingEntity)) return false;
         if (!entity.isAlive()) return false;
-        if (entity instanceof PlayerEntity player && player.isCreative()) return false;
+        
+        if (entity instanceof PlayerEntity player) {
+            if (!players.getValue()) return false;
+            if (Managers.FRIEND.isFriend(player)) return false;
+            if (ignoreCreative.getValue() && player.isCreative()) return false;
+            if (ignoreInvisible.getValue() && player.isInvisible()) return false;
+            if (ignoreNaked.getValue() && player.getArmor() == 0) return false;
+        }
         
         float currentRange = getDynamicRange();
         if (mc.player.distanceTo(entity) > currentRange) return false;
         
-        // Проверка на стену (если за стеной — пропускаем)
         if (!mc.player.canSee(entity)) return false;
         
         return true;
@@ -205,9 +265,20 @@ public class TPAura extends Module {
             sendPacket(new PlayerMoveC2SPacket.LookAndOnGround(rotations[0], rotations[1], mc.player.isOnGround()));
         }
 
-        mc.interactionManager.attackEntity(mc.player, target);
-        mc.player.swingHand(net.minecraft.util.Hand.MAIN_HAND);
-        attackTimer.reset();
+        // Выбор руки для атаки (как в KillAura)
+        switch (attackHand.getValue()) {
+            case OffHand:
+                mc.interactionManager.attackEntity(mc.player, target);
+                mc.player.swingHand(Hand.OFF_HAND);
+                break;
+            case MainHand:
+                mc.interactionManager.attackEntity(mc.player, target);
+                mc.player.swingHand(Hand.MAIN_HAND);
+                break;
+            case None:
+                mc.interactionManager.attackEntity(mc.player, target);
+                break;
+        }
     }
 
     private float[] getRotations(Entity target) {
