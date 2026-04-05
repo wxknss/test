@@ -7,7 +7,6 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.Vec3d;
-import thunder.hack.core.Managers;
 import thunder.hack.core.manager.client.ModuleManager;
 import thunder.hack.events.impl.PlayerUpdateEvent;
 import thunder.hack.features.modules.Module;
@@ -26,11 +25,9 @@ public class TPAura extends Module {
     // ===== ОСНОВНЫЕ НАСТРОЙКИ =====
     private final Setting<Float> range = new Setting<>("Range", 50f, 5f, 150f);
     private final Setting<Float> attackRange = new Setting<>("AttackRange", 3.5f, 1f, 6f);
+    private final Setting<Integer> attackTickLimit = new Setting<>("AttackTickLimit", 11, 0, 20);
     private final Setting<Boolean> rotate = new Setting<>("Rotate", true);
     private final Setting<Boolean> teleportBack = new Setting<>("TeleportBack", true);
-    
-    // ===== КУЛДАУН (автоматический для 1.9+) =====
-    private final Setting<Boolean> cooldown = new Setting<>("Cooldown", true);
     
     // ===== РУКА ДЛЯ АТАКИ =====
     private final Setting<AttackHand> attackHand = new Setting<>("AttackHand", AttackHand.MainHand);
@@ -45,7 +42,7 @@ public class TPAura extends Module {
     private final Setting<Boolean> adaptToFlight = new Setting<>("AdaptToFlight", true);
     private final Setting<Float> flightMultiplier = new Setting<>("FlightMultiplier", 5.0f, 1.0f, 15.0f, v -> adaptToFlight.getValue());
     
-    // ===== НАСТРОЙКИ ЦЕЛЕЙ =====
+    // ===== НАСТРОЙКИ ЦЕЛЕЙ (из Aura) =====
     private final Setting<Sort> sort = new Setting<>("Sort", Sort.LowestDistance);
     private final Setting<Boolean> players = new Setting<>("Players", true);
     private final Setting<Boolean> ignoreInvisible = new Setting<>("IgnoreInvisible", false);
@@ -64,24 +61,27 @@ public class TPAura extends Module {
     private Entity target;
     private Vec3d originalPos;
     private Vec3d teleportPos;
+    private int hitTicks = 0;
 
     @Override
     public void onEnable() {
         target = null;
+        hitTicks = 0;
     }
 
     @EventHandler
     public void onUpdate(PlayerUpdateEvent e) {
         if (fullNullCheck()) return;
+        
+        // Кулдаун как в KillAura (attackTickLimit)
+        if (hitTicks > 0) {
+            hitTicks--;
+            return;
+        }
 
         updateTarget();
 
         if (target == null) return;
-
-        // Кулдаун (автоматический, как в KillAura)
-        if (cooldown.getValue() && !isWeaponReady()) {
-            return;
-        }
 
         if (!timer.passedMs(20)) return;
 
@@ -103,12 +103,8 @@ public class TPAura extends Module {
             teleportTo(originalPos);
         }
         
+        hitTicks = attackTickLimit.getValue();
         timer.reset();
-    }
-
-    private boolean isWeaponReady() {
-        float attackCooldown = mc.player.getAttackCooldownProgress(0.5f);
-        return attackCooldown >= 1.0f;
     }
 
     private void updateTarget() {
