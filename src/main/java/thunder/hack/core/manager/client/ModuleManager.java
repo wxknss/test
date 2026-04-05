@@ -30,7 +30,6 @@ public class ModuleManager implements IManager {
     public List<Module> sortedModules = new ArrayList<>();
     public List<Integer> activeMouseKeys = new ArrayList<>();
 
-    public static PenisESP penisESP = new PenisESP();
     public static AntiPacketException antiPacketException = new AntiPacketException();
     public static LevitationControl levitationControl = new LevitationControl();
     public static InventoryCleaner inventoryCleaner = new InventoryCleaner();
@@ -140,7 +139,6 @@ public class ModuleManager implements IManager {
     public static WaterMark waterMark = new WaterMark();
     public static ViewModel viewModel = new ViewModel();
     public static TunnelEsp tunnelEsp = new TunnelEsp();
-    public static PhantomBlocks phantomBlocks = new PhantomBlocks();
     public static TickShift tickShift = new TickShift();
     public static TargetHud targetHud = new TargetHud();
     public static SpeedMine speedMine = new SpeedMine();
