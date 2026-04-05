@@ -7,7 +7,7 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.Vec3d;
-import thunder.hack.core.manager.client.ModuleManager;
+import thunder.hack.core.Managers;
 import thunder.hack.events.impl.PlayerUpdateEvent;
 import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
@@ -22,37 +22,28 @@ public class TPAura extends Module {
         super("TPAura", Category.COMBAT);
     }
 
-    // ===== ОСНОВНЫЕ НАСТРОЙКИ =====
     private final Setting<Float> range = new Setting<>("Range", 50f, 5f, 150f);
     private final Setting<Float> attackRange = new Setting<>("AttackRange", 3.5f, 1f, 6f);
     private final Setting<Integer> attackTickLimit = new Setting<>("AttackTickLimit", 11, 0, 20);
     private final Setting<Boolean> rotate = new Setting<>("Rotate", true);
     private final Setting<Boolean> teleportBack = new Setting<>("TeleportBack", true);
-    
-    // ===== РУКА ДЛЯ АТАКИ =====
-    private final Setting<AttackHand> attackHand = new Setting<>("AttackHand", AttackHand.MainHand);
-    
-    // ===== VANILLA DISABLER =====
     private final Setting<Boolean> vanillaDisabler = new Setting<>("VanillaDisabler", false);
     private final Setting<Float> distancePerPacket = new Setting<>("DistancePerPacket", 10f, 1f, 20f, v -> vanillaDisabler.getValue());
-    
-    // ===== АДАПТАЦИЯ ПОД FLIGHT/SPEED =====
     private final Setting<Boolean> adaptToSpeed = new Setting<>("AdaptToSpeed", true);
     private final Setting<Float> speedMultiplier = new Setting<>("SpeedMultiplier", 3.0f, 1.0f, 10.0f, v -> adaptToSpeed.getValue());
     private final Setting<Boolean> adaptToFlight = new Setting<>("AdaptToFlight", true);
     private final Setting<Float> flightMultiplier = new Setting<>("FlightMultiplier", 5.0f, 1.0f, 15.0f, v -> adaptToFlight.getValue());
-    
-    // ===== НАСТРОЙКИ ЦЕЛЕЙ (из Aura) =====
     private final Setting<Sort> sort = new Setting<>("Sort", Sort.LowestDistance);
     private final Setting<Boolean> players = new Setting<>("Players", true);
     private final Setting<Boolean> ignoreInvisible = new Setting<>("IgnoreInvisible", false);
     private final Setting<Boolean> ignoreCreative = new Setting<>("IgnoreCreative", true);
     private final Setting<Boolean> ignoreNaked = new Setting<>("IgnoreNaked", false);
+    private final Setting<AttackHand> attackHand = new Setting<>("AttackHand", AttackHand.MainHand);
 
     public enum Sort {
         LowestDistance, HighestDistance, LowestHealth, HighestHealth, FOV
     }
-    
+
     public enum AttackHand {
         MainHand, OffHand, None
     }
@@ -72,8 +63,7 @@ public class TPAura extends Module {
     @EventHandler
     public void onUpdate(PlayerUpdateEvent e) {
         if (fullNullCheck()) return;
-        
-        // Кулдаун как в KillAura (attackTickLimit)
+
         if (hitTicks > 0) {
             hitTicks--;
             return;
