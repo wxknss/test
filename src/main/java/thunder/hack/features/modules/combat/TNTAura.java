@@ -1,282 +1,276 @@
 package thunder.hack.features.modules.combat;
 
+import com.google.common.collect.Lists;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
+import net.minecraft.block.TntBlock;
+import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
+import net.minecraft.item.Items;
+import net.minecraft.network.packet.c2s.play.PlayerInteractBlockC2SPacket;
 import net.minecraft.util.Hand;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Box;
+import net.minecraft.util.math.Direction;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import thunder.hack.core.Managers;
-import thunder.hack.events.impl.PlayerUpdateEvent;
+import thunder.hack.events.impl.EventTick;
 import thunder.hack.features.modules.Module;
+import thunder.hack.features.modules.client.HudEditor;
 import thunder.hack.setting.Setting;
+import thunder.hack.setting.impl.ColorSetting;
+import thunder.hack.setting.impl.SettingGroup;
 import thunder.hack.utility.Timer;
+import thunder.hack.utility.player.InteractionUtility;
+import thunder.hack.utility.player.InventoryUtility;
+import thunder.hack.utility.player.PlayerUtility;
+import thunder.hack.utility.render.Render2DEngine;
+import thunder.hack.utility.render.Render3DEngine;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
-public class TPAura extends Module {
-    public TPAura() {
-        super("TPAura", Category.COMBAT);
+import static thunder.hack.features.modules.client.ClientSettings.isRu;
+
+public class TNTAura extends Module {
+    public TNTAura() {
+        super("TNTAura", Category.COMBAT);
     }
 
-    private final Setting<Float> range = new Setting<>("Range", 50f, 5f, 150f);
-    private final Setting<Float> attackRange = new Setting<>("AttackRange", 3.5f, 1f, 6f);
-    private final Setting<Integer> attackTickLimit = new Setting<>("AttackTickLimit", 11, 0, 20);
-    private final Setting<Boolean> rotate = new Setting<>("Rotate", true);
-    private final Setting<Boolean> teleportBack = new Setting<>("TeleportBack", true);
-    private final Setting<Boolean> vanillaDisabler = new Setting<>("VanillaDisabler", false);
-    private final Setting<Float> distancePerPacket = new Setting<>("DistancePerPacket", 10f, 1f, 20f, v -> vanillaDisabler.getValue());
-    
-    // Адаптация под Flight/Speed
-    private final Setting<Boolean> adaptToSpeed = new Setting<>("AdaptToSpeed", true);
-    private final Setting<Float> speedMultiplier = new Setting<>("SpeedMultiplier", 3.0f, 1.0f, 10.0f, v -> adaptToSpeed.getValue());
-    private final Setting<Boolean> adaptToFlight = new Setting<>("AdaptToFlight", true);
-    private final Setting<Float> flightMultiplier = new Setting<>("FlightMultiplier", 5.0f, 1.0f, 15.0f, v -> adaptToFlight.getValue());
-    
-    // Выбор цели
-    private final Setting<Sort> sort = new Setting<>("Sort", Sort.LowestDistance);
-    private final Setting<Boolean> players = new Setting<>("Players", true);
-    private final Setting<Boolean> ignoreInvisible = new Setting<>("IgnoreInvisible", false);
-    private final Setting<Boolean> ignoreCreative = new Setting<>("IgnoreCreative", true);
-    private final Setting<Boolean> ignoreNaked = new Setting<>("IgnoreNaked", false);
-    
-    // Рука для атаки
-    private final Setting<AttackHand> attackHand = new Setting<>("AttackHand", AttackHand.MainHand);
+    private final Setting<Float> range = new Setting<>("Range", 5f, 2f, 7f);
+    private final Setting<Integer> blocksPerTick = new Setting<>("Block/Tick", 8, 1, 12);
+    private final Setting<Integer> placeDelay = new Setting<>("Delay/Place", 3, 0, 10);
+    private final Setting<InteractionUtility.PlaceMode> placeMode = new Setting<>("PlaceMode", InteractionUtility.PlaceMode.Normal);
+    private final Setting<InteractionUtility.Rotate> rotate = new Setting<>("Rotate", InteractionUtility.Rotate.None);
+    private final Setting<SettingGroup> renderCategory = new Setting<>("Render", new SettingGroup(false, 0));
+    private final Setting<RenderMode> renderMode = new Setting<>("RenderMode", RenderMode.Fade).addToGroup(renderCategory);
+    private final Setting<ColorSetting> renderFillColor = new Setting<>("Fill", new ColorSetting(HudEditor.getColor(0))).addToGroup(renderCategory);
+    private final Setting<ColorSetting> renderLineColor = new Setting<>("Line", new ColorSetting(HudEditor.getColor(0))).addToGroup(renderCategory);
+    private final Setting<Integer> renderLineWidth = new Setting<>("LineWidth", 2, 1, 5).addToGroup(renderCategory);
 
-    public enum Sort {
-        LowestDistance, HighestDistance, LowestHealth, HighestHealth, FOV
-    }
-    
-    public enum AttackHand {
-        MainHand, OffHand, None
-    }
+    private final Map<BlockPos, Long> renderPoses = new ConcurrentHashMap<>();
+    public static Timer inactivityTimer = new Timer();
 
-    private final Timer timer = new Timer();
-    private Entity target;
-    private Vec3d originalPos;
-    private Vec3d teleportPos;
-    private int hitTicks = 0;
+    private int delay;
 
-    @Override
-    public void onEnable() {
-        target = null;
-        hitTicks = 0;
+    public void onRender3D(MatrixStack stack) {
+        renderPoses.forEach((pos, time) -> {
+            if (System.currentTimeMillis() - time > 500) {
+                renderPoses.remove(pos);
+            } else {
+                switch (renderMode.getValue()) {
+                    case Fade -> {
+                        Render3DEngine.drawFilledBox(stack, new Box(pos), Render2DEngine.injectAlpha(renderFillColor.getValue().getColorObject(), (int) (100f * (1f - ((System.currentTimeMillis() - time) / 500f)))));
+                        Render3DEngine.drawBoxOutline(new Box(pos), Render2DEngine.injectAlpha(renderLineColor.getValue().getColorObject(), (int) (100f * (1f - ((System.currentTimeMillis() - time) / 500f)))), renderLineWidth.getValue());
+                    }
+                    case Decrease -> {
+                        float scale = 1 - (float) (System.currentTimeMillis() - time) / 500;
+                        Box box = new Box(pos.getX(), pos.getY(), pos.getZ(), pos.getX(), pos.getY(), pos.getZ());
+
+                        Render3DEngine.drawFilledBox(stack, box.shrink(scale, scale, scale).offset(0.5 + scale * 0.5, 0.5 + scale * 0.5, 0.5 + scale * 0.5), Render2DEngine.injectAlpha(renderFillColor.getValue().getColorObject(), (int) (100f * (1f - ((System.currentTimeMillis() - time) / 500f)))));
+                        Render3DEngine.drawBoxOutline(box.shrink(scale, scale, scale).offset(0.5 + scale * 0.5, 0.5 + scale * 0.5, 0.5 + scale * 0.5), renderLineColor.getValue().getColorObject(), renderLineWidth.getValue());
+                    }
+                }
+            }
+        });
     }
 
     @EventHandler
-    public void onUpdate(PlayerUpdateEvent e) {
-        if (fullNullCheck()) return;
-        
-        if (hitTicks > 0) {
-            hitTicks--;
+    public void onTick(EventTick e) {
+        if (getTntSlot() == -1) {
+            disable(isRu() ? "Нет динамита!" : "No TNT!");
+            return;
+        }
+        if (getFlintSlot() == -1) {
+            disable(isRu() ? "Нет зажигалки!" : "No flint and steel!");
+            return;
+        }
+        if (getObbySlot() == -1) {
+            disable(isRu() ? "Нет обсидиана!" : "No obsidian!");
             return;
         }
 
-        updateTarget();
+        PlayerEntity targetedPlayer = Managers.COMBAT.getNearestTarget(range.getValue());
 
-        if (target == null) return;
-
-        if (!timer.passedMs(1000 / 10)) return;
-
-        originalPos = mc.player.getPos();
-        teleportPos = getTeleportPosition(target, getDynamicAttackRange());
-
-        if (teleportPos == null) return;
-
-        if (vanillaDisabler.getValue()) {
-            sendVanillaPackets();
-        }
-
-        sendSpoofPackets();
-        
-        teleportTo(teleportPos);
-        attack();
-        
-        if (teleportBack.getValue()) {
-            teleportTo(originalPos);
-        }
-        
-        hitTicks = attackTickLimit.getValue();
-        timer.reset();
-    }
-
-    private void updateTarget() {
-        List<Entity> entities = new ArrayList<>();
-        for (Entity entity : mc.world.getEntities()) {
-            if (isValidTarget(entity)) {
-                entities.add(entity);
+        List<BlockPos> blocks = getBlocks(targetedPlayer);
+        if (!blocks.isEmpty()) {
+            if (delay > 0) {
+                delay--;
+                return;
             }
+
+            InventoryUtility.saveSlot();
+            int placed = 0;
+            while (placed < blocksPerTick.getValue()) {
+                BlockPos targetBlock = getSequentialPos(targetedPlayer);
+                if (targetBlock == null)
+                    break;
+                if (InteractionUtility.placeBlock(targetBlock, rotate.getValue(), InteractionUtility.Interact.Vanilla, placeMode.getValue(), getObbySlot(), false, false)) {
+                    placed++;
+                    delay = placeDelay.getValue();
+                    inactivityTimer.reset();
+                    renderPoses.put(targetBlock, System.currentTimeMillis());
+                } else break;
+            }
+            InventoryUtility.returnSlot();
         }
 
-        if (entities.isEmpty()) {
-            target = null;
-            return;
-        }
-
-        switch (sort.getValue()) {
-            case LowestDistance:
-                target = entities.stream().min(Comparator.comparingDouble(e -> mc.player.squaredDistanceTo(e))).orElse(null);
-                break;
-            case HighestDistance:
-                target = entities.stream().max(Comparator.comparingDouble(e -> mc.player.squaredDistanceTo(e))).orElse(null);
-                break;
-            case LowestHealth:
-                target = entities.stream().min(Comparator.comparingDouble(e -> getHealth(e))).orElse(null);
-                break;
-            case HighestHealth:
-                target = entities.stream().max(Comparator.comparingDouble(e -> getHealth(e))).orElse(null);
-                break;
-            case FOV:
-                target = entities.stream().min(Comparator.comparingDouble(this::getFOVAngle)).orElse(null);
-                break;
+        if (targetedPlayer != null) {
+            BlockPos headBlock = BlockPos.ofFloored(targetedPlayer.getPos()).up(2);
+            InventoryUtility.saveSlot();
+            InteractionUtility.placeBlock(headBlock, rotate.getValue(), InteractionUtility.Interact.Vanilla, placeMode.getValue(), getTntSlot(), false, false);
+            BlockHitResult igniteResult = getIgniteResult(headBlock);
+            InventoryUtility.switchTo(getFlintSlot());
+            if (mc.world.getBlockState(headBlock).getBlock() instanceof TntBlock && igniteResult != null) {
+                sendSequencedPacket(id -> new PlayerInteractBlockC2SPacket(Hand.MAIN_HAND, igniteResult, id));
+                mc.player.swingHand(Hand.MAIN_HAND);
+            }
+            renderPoses.put(headBlock, System.currentTimeMillis());
+            InventoryUtility.returnSlot();
         }
     }
 
-    private double getHealth(Entity entity) {
-        if (entity instanceof LivingEntity living) {
-            return living.getHealth() + living.getAbsorptionAmount();
-        }
-        return 0;
-    }
-
-    private double getFOVAngle(Entity entity) {
-        double diffX = entity.getX() - mc.player.getX();
-        double diffZ = entity.getZ() - mc.player.getZ();
-        float yaw = (float) Math.toDegrees(Math.atan2(diffZ, diffX)) - 90;
-        return Math.abs(yaw - mc.player.getYaw());
-    }
-
-    private boolean isValidTarget(Entity entity) {
-        if (entity == mc.player) return false;
-        if (!(entity instanceof LivingEntity)) return false;
-        if (!entity.isAlive()) return false;
-        
-        if (entity instanceof PlayerEntity player) {
-            if (!players.getValue()) return false;
-            if (Managers.FRIEND.isFriend(player)) return false;
-            if (ignoreCreative.getValue() && player.isCreative()) return false;
-            if (ignoreInvisible.getValue() && player.isInvisible()) return false;
-            if (ignoreNaked.getValue() && player.getArmor() == 0) return false;
-        }
-        
-        float currentRange = getDynamicRange();
-        if (mc.player.distanceTo(entity) > currentRange) return false;
-        
-        if (!mc.player.canSee(entity)) return false;
-        
-        return true;
-    }
-    
-    private float getDynamicRange() {
-        float baseRange = range.getValue();
-        if (adaptToSpeed.getValue() && thunder.hack.core.manager.client.ModuleManager.speed.isEnabled()) {
-            baseRange *= speedMultiplier.getValue();
-        }
-        if (adaptToFlight.getValue() && thunder.hack.core.manager.client.ModuleManager.flight.isEnabled()) {
-            baseRange *= flightMultiplier.getValue();
-        }
-        return baseRange;
-    }
-    
-    private float getDynamicAttackRange() {
-        float baseRange = attackRange.getValue();
-        if (adaptToSpeed.getValue() && thunder.hack.core.manager.client.ModuleManager.speed.isEnabled()) {
-            baseRange *= speedMultiplier.getValue();
-        }
-        if (adaptToFlight.getValue() && thunder.hack.core.manager.client.ModuleManager.flight.isEnabled()) {
-            baseRange *= flightMultiplier.getValue();
-        }
-        return baseRange;
-    }
-
-    private void sendVanillaPackets() {
-        double distance = Math.sqrt(
-            Math.pow(mc.player.getX() - mc.player.prevX, 2) +
-            Math.pow(mc.player.getY() - mc.player.prevY, 2) +
-            Math.pow(mc.player.getZ() - mc.player.prevZ, 2)
-        );
-        
-        int packets = (int) (distance / distancePerPacket.getValue());
-        
-        for (int i = 0; i < packets; i++) {
-            sendPacket(new PlayerMoveC2SPacket.OnGroundOnly(true));
-        }
-    }
-    
-    private void sendSpoofPackets() {
-        for (int i = 0; i < 5; i++) {
-            sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(
-                mc.player.getX(),
-                mc.player.getY() + 0.001 * i,
-                mc.player.getZ(),
-                true
-            ));
-        }
-    }
-
-    private void teleportTo(Vec3d pos) {
-        mc.player.setPosition(pos.x, pos.y, pos.z);
-        sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(pos.x, pos.y, pos.z, false));
-    }
-
-    private Vec3d getTeleportPosition(Entity target, float range) {
-        double yawRad = Math.toRadians(mc.player.getYaw());
-        double directionX = -Math.sin(yawRad);
-        double directionZ = Math.cos(yawRad);
-
-        for (double r = 1.5; r <= range; r += 0.5) {
-            Vec3d pos = new Vec3d(
-                target.getX() + directionX * r,
-                target.getY(),
-                target.getZ() + directionZ * r
-            );
-            if (isPositionSafe(pos)) {
-                return pos;
+    private BlockPos getSequentialPos(PlayerEntity pl) {
+        List<BlockPos> list = getBlocks(pl);
+        if (list.isEmpty()) return null;
+        for (BlockPos bp : getBlocks(pl)) {
+            if (InteractionUtility.canPlaceBlock(bp, InteractionUtility.Interact.Vanilla, false) && mc.world.isAir(bp)) {
+                return bp;
             }
         }
         return null;
     }
 
-    private boolean isPositionSafe(Vec3d pos) {
-        return !mc.world.getBlockCollisions(mc.player, mc.player.getBoundingBox().offset(pos.subtract(mc.player.getPos()))).iterator().hasNext();
-    }
+    private List<BlockPos> getBlocks(PlayerEntity pl) {
+        if (pl == null) return new ArrayList<>();
+        List<BlockPos> blocks = new ArrayList<>();
+        for (BlockPos bp : getAffectedBlocks(pl)) {
+            for (Direction dir : Direction.values()) {
+                if (dir == Direction.UP || dir == Direction.DOWN) continue;
+                blocks.add(bp.offset(dir));
+                blocks.add(bp.offset(dir).up());
 
-    private void attack() {
-        if (target == null) return;
+                if (!new Box(bp.offset(dir).up(1)).intersects(pl.getBoundingBox()))
+                    blocks.add(bp.offset(dir).up(2));
 
-        if (rotate.getValue()) {
-            float[] rotations = getRotations(target);
-            sendPacket(new PlayerMoveC2SPacket.LookAndOnGround(rotations[0], rotations[1], mc.player.isOnGround()));
+                blocks.add(bp.offset(dir).down());
+            }
+
+            blocks.add(bp.down());
+            blocks.add(bp.up(3));
+
+            if (!InteractionUtility.canPlaceBlock(bp.up(3), InteractionUtility.Interact.Vanilla, false)) {
+                Direction dir = mc.player.getHorizontalFacing();
+                if (dir != null) {
+                    blocks.add(bp.up(3).offset(dir, 1));
+                }
+            }
         }
 
-        switch (attackHand.getValue()) {
-            case OffHand:
-                mc.interactionManager.attackEntity(mc.player, target);
-                mc.player.swingHand(Hand.OFF_HAND);
-                break;
-            case MainHand:
-                mc.interactionManager.attackEntity(mc.player, target);
-                mc.player.swingHand(Hand.MAIN_HAND);
-                break;
-            case None:
-                mc.interactionManager.attackEntity(mc.player, target);
-                break;
-        }
+        return blocks.stream().sorted(Comparator.comparing(b -> mc.player.squaredDistanceTo(b.toCenterPos()) * -1)).toList();
     }
 
-    private float[] getRotations(Entity target) {
-        Vec3d vec = target.getBoundingBox().getCenter();
-        Vec3d eyes = mc.player.getEyePos();
-        double diffX = vec.x - eyes.x;
-        double diffY = vec.y - eyes.y;
-        double diffZ = vec.z - eyes.z;
+    private int getObbySlot() {
+        if (mc.player.getMainHandStack().getItem() == Items.OBSIDIAN)
+            return mc.player.getInventory().selectedSlot;
 
-        double yaw = Math.toDegrees(Math.atan2(diffZ, diffX)) - 90;
-        double pitch = -Math.toDegrees(Math.atan2(diffY, Math.hypot(diffX, diffZ)));
+        int slot = -1;
 
-        return new float[]{(float) yaw, (float) pitch};
+        for (int i = 0; i < 9; i++) {
+            if (mc.player.getInventory().getStack(i).getItem() == Items.OBSIDIAN) {
+                slot = i;
+                break;
+            }
+        }
+        return slot;
+    }
+
+    private int getTntSlot() {
+        if (mc.player.getMainHandStack().getItem() == Items.TNT)
+            return mc.player.getInventory().selectedSlot;
+
+        int slot = -1;
+
+        for (int i = 0; i < 9; i++) {
+            if (mc.player.getInventory().getStack(i).getItem() == Items.TNT) {
+                slot = i;
+                break;
+            }
+        }
+        return slot;
+    }
+
+    private int getFlintSlot() {
+        if (mc.player.getMainHandStack().getItem() == Items.FLINT_AND_STEEL)
+            return mc.player.getInventory().selectedSlot;
+
+        int slot = -1;
+
+        for (int i = 0; i < 9; i++) {
+            if (mc.player.getInventory().getStack(i).getItem() == Items.FLINT_AND_STEEL) {
+                slot = i;
+                break;
+            }
+        }
+        return slot;
+    }
+
+    private @Nullable BlockHitResult getIgniteResult(BlockPos bp) {
+        if (mc.player == null || mc.world == null) return null;
+
+        if (PlayerUtility.squaredDistanceFromEyes(bp.toCenterPos()) > range.getPow2Value())
+            return null;
+
+        return new BlockHitResult(bp.toCenterPos().add(0, -0.5, 0), Direction.DOWN, bp, false);
+    }
+
+    private List<BlockPos> getAffectedBlocks(PlayerEntity pl) {
+        List<BlockPos> tempPos = new ArrayList<>();
+        List<BlockPos> finalPos = new ArrayList<>();
+        List<Box> boxes = new ArrayList<>();
+
+        for (PlayerEntity player : mc.world.getPlayers()) {
+            if (player.squaredDistanceTo(pl) < 9 && player != pl)
+                boxes.add(player.getBoundingBox());
+        }
+
+        boxes.add(pl.getBoundingBox());
+
+        BlockPos center = getPlayerPos(pl);
+
+        tempPos.add(center);
+        tempPos.add(center.north());
+        tempPos.add(center.north().east());
+        tempPos.add(center.west());
+        tempPos.add(center.west().north());
+        tempPos.add(center.south());
+        tempPos.add(center.south().west());
+        tempPos.add(center.east());
+        tempPos.add(center.east().south());
+
+        for (BlockPos bp : tempPos)
+            if (new Box(bp).intersects(pl.getBoundingBox()))
+                finalPos.add(bp);
+
+        for (BlockPos bp : Lists.newArrayList(finalPos)) {
+            for (Box box : boxes) {
+                if (new Box(bp).intersects(box))
+                    finalPos.add(BlockPos.ofFloored(box.getCenter()));
+            }
+        }
+
+        return finalPos;
+    }
+
+    private BlockPos getPlayerPos(@NotNull PlayerEntity pl) {
+        return BlockPos.ofFloored(pl.getX(), pl.getY() - Math.floor(pl.getY()) > 0.8 ? Math.floor(pl.getY()) + 1.0 : Math.floor(pl.getY()), pl.getZ());
+    }
+
+    private enum RenderMode {
+        Fade, Decrease
     }
 }
