@@ -7,6 +7,7 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.Vec3d;
+import thunder.hack.core.Managers;
 import thunder.hack.core.manager.client.ModuleManager;
 import thunder.hack.events.impl.PlayerUpdateEvent;
 import thunder.hack.features.modules.Module;
@@ -28,7 +29,7 @@ public class TPAura extends Module {
     private final Setting<Boolean> rotate = new Setting<>("Rotate", true);
     private final Setting<Boolean> teleportBack = new Setting<>("TeleportBack", true);
     
-    // ===== КУЛДАУН =====
+    // ===== КУЛДАУН (автоматический для 1.9+) =====
     private final Setting<Boolean> cooldown = new Setting<>("Cooldown", true);
     
     // ===== РУКА ДЛЯ АТАКИ =====
@@ -36,13 +37,13 @@ public class TPAura extends Module {
     
     // ===== VANILLA DISABLER =====
     private final Setting<Boolean> vanillaDisabler = new Setting<>("VanillaDisabler", false);
-    private final Setting<Float> distancePerPacket = new Setting<>("DistancePerPacket", 10f, 1f, 20f);
+    private final Setting<Float> distancePerPacket = new Setting<>("DistancePerPacket", 10f, 1f, 20f, v -> vanillaDisabler.getValue());
     
     // ===== АДАПТАЦИЯ ПОД FLIGHT/SPEED =====
     private final Setting<Boolean> adaptToSpeed = new Setting<>("AdaptToSpeed", true);
-    private final Setting<Float> speedMultiplier = new Setting<>("SpeedMultiplier", 3.0f, 1.0f, 10.0f);
+    private final Setting<Float> speedMultiplier = new Setting<>("SpeedMultiplier", 3.0f, 1.0f, 10.0f, v -> adaptToSpeed.getValue());
     private final Setting<Boolean> adaptToFlight = new Setting<>("AdaptToFlight", true);
-    private final Setting<Float> flightMultiplier = new Setting<>("FlightMultiplier", 5.0f, 1.0f, 15.0f);
+    private final Setting<Float> flightMultiplier = new Setting<>("FlightMultiplier", 5.0f, 1.0f, 15.0f, v -> adaptToFlight.getValue());
     
     // ===== НАСТРОЙКИ ЦЕЛЕЙ =====
     private final Setting<Sort> sort = new Setting<>("Sort", Sort.LowestDistance);
@@ -77,6 +78,7 @@ public class TPAura extends Module {
 
         if (target == null) return;
 
+        // Кулдаун (автоматический, как в KillAura)
         if (cooldown.getValue() && !isWeaponReady()) {
             return;
         }
