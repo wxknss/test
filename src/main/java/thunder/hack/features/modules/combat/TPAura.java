@@ -29,21 +29,27 @@ public class TPAura extends Module {
     private final Setting<Boolean> teleportBack = new Setting<>("TeleportBack", true);
     private final Setting<Boolean> vanillaDisabler = new Setting<>("VanillaDisabler", false);
     private final Setting<Float> distancePerPacket = new Setting<>("DistancePerPacket", 10f, 1f, 20f, v -> vanillaDisabler.getValue());
+    
+    // Адаптация под Flight/Speed
     private final Setting<Boolean> adaptToSpeed = new Setting<>("AdaptToSpeed", true);
     private final Setting<Float> speedMultiplier = new Setting<>("SpeedMultiplier", 3.0f, 1.0f, 10.0f, v -> adaptToSpeed.getValue());
     private final Setting<Boolean> adaptToFlight = new Setting<>("AdaptToFlight", true);
     private final Setting<Float> flightMultiplier = new Setting<>("FlightMultiplier", 5.0f, 1.0f, 15.0f, v -> adaptToFlight.getValue());
+    
+    // Выбор цели
     private final Setting<Sort> sort = new Setting<>("Sort", Sort.LowestDistance);
     private final Setting<Boolean> players = new Setting<>("Players", true);
     private final Setting<Boolean> ignoreInvisible = new Setting<>("IgnoreInvisible", false);
     private final Setting<Boolean> ignoreCreative = new Setting<>("IgnoreCreative", true);
     private final Setting<Boolean> ignoreNaked = new Setting<>("IgnoreNaked", false);
+    
+    // Рука для атаки
     private final Setting<AttackHand> attackHand = new Setting<>("AttackHand", AttackHand.MainHand);
 
     public enum Sort {
         LowestDistance, HighestDistance, LowestHealth, HighestHealth, FOV
     }
-
+    
     public enum AttackHand {
         MainHand, OffHand, None
     }
@@ -63,7 +69,7 @@ public class TPAura extends Module {
     @EventHandler
     public void onUpdate(PlayerUpdateEvent e) {
         if (fullNullCheck()) return;
-
+        
         if (hitTicks > 0) {
             hitTicks--;
             return;
@@ -73,7 +79,7 @@ public class TPAura extends Module {
 
         if (target == null) return;
 
-        if (!timer.passedMs(20)) return;
+        if (!timer.passedMs(1000 / 10)) return;
 
         originalPos = mc.player.getPos();
         teleportPos = getTeleportPosition(target, getDynamicAttackRange());
@@ -166,10 +172,10 @@ public class TPAura extends Module {
     
     private float getDynamicRange() {
         float baseRange = range.getValue();
-        if (adaptToSpeed.getValue() && ModuleManager.speed.isEnabled()) {
+        if (adaptToSpeed.getValue() && thunder.hack.core.manager.client.ModuleManager.speed.isEnabled()) {
             baseRange *= speedMultiplier.getValue();
         }
-        if (adaptToFlight.getValue() && ModuleManager.flight.isEnabled()) {
+        if (adaptToFlight.getValue() && thunder.hack.core.manager.client.ModuleManager.flight.isEnabled()) {
             baseRange *= flightMultiplier.getValue();
         }
         return baseRange;
@@ -177,10 +183,10 @@ public class TPAura extends Module {
     
     private float getDynamicAttackRange() {
         float baseRange = attackRange.getValue();
-        if (adaptToSpeed.getValue() && ModuleManager.speed.isEnabled()) {
+        if (adaptToSpeed.getValue() && thunder.hack.core.manager.client.ModuleManager.speed.isEnabled()) {
             baseRange *= speedMultiplier.getValue();
         }
-        if (adaptToFlight.getValue() && ModuleManager.flight.isEnabled()) {
+        if (adaptToFlight.getValue() && thunder.hack.core.manager.client.ModuleManager.flight.isEnabled()) {
             baseRange *= flightMultiplier.getValue();
         }
         return baseRange;
