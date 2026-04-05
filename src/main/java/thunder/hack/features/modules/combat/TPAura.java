@@ -4,18 +4,15 @@ import meteordevelopment.orbit.EventHandler;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.SwordItem;
-import net.minecraft.item.AxeItem;
-import net.minecraft.item.TridentItem;
 import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.Vec3d;
+import thunder.hack.core.Managers;
 import thunder.hack.core.manager.client.ModuleManager;
 import thunder.hack.events.impl.PlayerUpdateEvent;
 import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
 import thunder.hack.utility.Timer;
-import thunder.hack.utility.player.InventoryUtility;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -23,37 +20,37 @@ import java.util.List;
 
 public class TPAura extends Module {
     public TPAura() {
-        super("TPAura", Category.COMBAT);
+        super("TPAura", Category.COMBAT, "Телепортируется к цели, бьёт и возвращается");
     }
 
     // ===== ОСНОВНЫЕ НАСТРОЙКИ =====
-    private final Setting<Float> range = new Setting<>("Range", 50f, 5f, 150f);
-    private final Setting<Float> attackRange = new Setting<>("AttackRange", 3.5f, 1f, 6f);
-    private final Setting<Boolean> rotate = new Setting<>("Rotate", true);
-    private final Setting<Boolean> teleportBack = new Setting<>("TeleportBack", true);
+    private final Setting<Float> range = new Setting<>("Range", 50f, 5f, 150f, "Максимальная дистанция поиска цели");
+    private final Setting<Float> attackRange = new Setting<>("AttackRange", 3.5f, 1f, 6f, "Дистанция для телепорта к цели");
+    private final Setting<Boolean> rotate = new Setting<>("Rotate", true, "Поворачиваться к цели");
+    private final Setting<Boolean> teleportBack = new Setting<>("TeleportBack", true, "Возвращаться на исходную позицию после атаки");
     
-    // ===== КУЛДАУН (автоматический для 1.9+) =====
-    private final Setting<Boolean> cooldown = new Setting<>("Cooldown", true);
+    // ===== КУЛДАУН =====
+    private final Setting<Boolean> cooldown = new Setting<>("Cooldown", true, "Автоматический кулдаун для 1.9+ PvP");
     
     // ===== РУКА ДЛЯ АТАКИ =====
-    private final Setting<AttackHand> attackHand = new Setting<>("AttackHand", AttackHand.MainHand);
+    private final Setting<AttackHand> attackHand = new Setting<>("AttackHand", AttackHand.MainHand, "Какой рукой атаковать");
     
     // ===== VANILLA DISABLER =====
-    private final Setting<Boolean> vanillaDisabler = new Setting<>("VanillaDisabler", false);
-    private final Setting<Float> distancePerPacket = new Setting<>("DistancePerPacket", 10f, 1f, 20f, v -> vanillaDisabler.getValue());
+    private final Setting<Boolean> vanillaDisabler = new Setting<>("VanillaDisabler", false, "Спамит пакетами перед телепортом");
+    private final Setting<Float> distancePerPacket = new Setting<>("DistancePerPacket", 10f, 1f, 20f, v -> vanillaDisabler.getValue(), "Дистанция на один пакет");
     
     // ===== АДАПТАЦИЯ ПОД FLIGHT/SPEED =====
-    private final Setting<Boolean> adaptToSpeed = new Setting<>("AdaptToSpeed", true);
-    private final Setting<Float> speedMultiplier = new Setting<>("SpeedMultiplier", 3.0f, 1.0f, 10.0f, v -> adaptToSpeed.getValue());
-    private final Setting<Boolean> adaptToFlight = new Setting<>("AdaptToFlight", true);
-    private final Setting<Float> flightMultiplier = new Setting<>("FlightMultiplier", 5.0f, 1.0f, 15.0f, v -> adaptToFlight.getValue());
+    private final Setting<Boolean> adaptToSpeed = new Setting<>("AdaptToSpeed", true, "Увеличивать дальность при включённом Speed");
+    private final Setting<Float> speedMultiplier = new Setting<>("SpeedMultiplier", 3.0f, 1.0f, 10.0f, v -> adaptToSpeed.getValue(), "Множитель дальности для Speed");
+    private final Setting<Boolean> adaptToFlight = new Setting<>("AdaptToFlight", true, "Увеличивать дальность при включённом Flight");
+    private final Setting<Float> flightMultiplier = new Setting<>("FlightMultiplier", 5.0f, 1.0f, 15.0f, v -> adaptToFlight.getValue(), "Множитель дальности для Flight");
     
     // ===== НАСТРОЙКИ ЦЕЛЕЙ =====
-    private final Setting<Sort> sort = new Setting<>("Sort", Sort.LowestDistance);
-    private final Setting<Boolean> players = new Setting<>("Players", true);
-    private final Setting<Boolean> ignoreInvisible = new Setting<>("IgnoreInvisible", false);
-    private final Setting<Boolean> ignoreCreative = new Setting<>("IgnoreCreative", true);
-    private final Setting<Boolean> ignoreNaked = new Setting<>("IgnoreNaked", false);
+    private final Setting<Sort> sort = new Setting<>("Sort", Sort.LowestDistance, "Как сортировать цели");
+    private final Setting<Boolean> players = new Setting<>("Players", true, "Атаковать игроков");
+    private final Setting<Boolean> ignoreInvisible = new Setting<>("IgnoreInvisible", false, "Игнорировать невидимок");
+    private final Setting<Boolean> ignoreCreative = new Setting<>("IgnoreCreative", true, "Игнорировать креативных игроков");
+    private final Setting<Boolean> ignoreNaked = new Setting<>("IgnoreNaked", false, "Игнорировать голых (без брони)");
 
     public enum Sort {
         LowestDistance, HighestDistance, LowestHealth, HighestHealth, FOV
@@ -81,7 +78,6 @@ public class TPAura extends Module {
 
         if (target == null) return;
 
-        // Кулдаун (автоматический, как в KillAura)
         if (cooldown.getValue() && !isWeaponReady()) {
             return;
         }
@@ -110,8 +106,6 @@ public class TPAura extends Module {
     }
 
     private boolean isWeaponReady() {
-        // Автоматический кулдаун как в KillAura
-        // Возвращает true если оружие готово к атаке
         float attackCooldown = mc.player.getAttackCooldownProgress(0.5f);
         return attackCooldown >= 1.0f;
     }
@@ -265,7 +259,6 @@ public class TPAura extends Module {
             sendPacket(new PlayerMoveC2SPacket.LookAndOnGround(rotations[0], rotations[1], mc.player.isOnGround()));
         }
 
-        // Выбор руки для атаки (как в KillAura)
         switch (attackHand.getValue()) {
             case OffHand:
                 mc.interactionManager.attackEntity(mc.player, target);
