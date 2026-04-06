@@ -26,38 +26,31 @@ public class TPAura extends Module {
         super("TPAura", Category.COMBAT);
     }
 
-    // ===== ОСНОВНЫЕ НАСТРОЙКИ =====
     private final Setting<Float> range = new Setting<>("Range", 50f, 5f, 150f);
     private final Setting<Float> attackRange = new Setting<>("AttackRange", 3.5f, 1f, 6f);
     private final Setting<Integer> cps = new Setting<>("CPS", 10, 1, 20);
     private final Setting<Boolean> rotate = new Setting<>("Rotate", true);
     private final Setting<Boolean> teleportBack = new Setting<>("TeleportBack", true);
     
-    // ===== ФИЛЬТРЫ ЦЕЛЕЙ =====
-    private final Setting<SettingGroup> targets = new Setting<>("Targets", new SettingGroup(false, 0));
-    private final Setting<Boolean> players = new Setting<>("Players", true).addToGroup(targets);
-    private final Setting<Boolean> mobs = new Setting<>("Mobs", false).addToGroup(targets);
-    private final Setting<Boolean> animals = new Setting<>("Animals", false).addToGroup(targets);
-    private final Setting<Boolean> villagers = new Setting<>("Villagers", false).addToGroup(targets);
-    private final Setting<Boolean> hostiles = new Setting<>("Hostiles", true).addToGroup(targets);
-    private final Setting<Boolean> onlyAngry = new Setting<>("OnlyAngryHostiles", true, v -> hostiles.getValue()).addToGroup(targets);
-    private final Setting<Boolean> ignoreInvisible = new Setting<>("IgnoreInvisible", false).addToGroup(targets);
-    private final Setting<Boolean> ignoreNamed = new Setting<>("IgnoreNamed", false).addToGroup(targets);
-    private final Setting<Boolean> ignoreTeam = new Setting<>("IgnoreTeam", false).addToGroup(targets);
-    private final Setting<Boolean> ignoreCreative = new Setting<>("IgnoreCreative", true).addToGroup(targets);
-    private final Setting<Boolean> ignoreNaked = new Setting<>("IgnoreNaked", false).addToGroup(targets);
+    private final Setting<Boolean> players = new Setting<>("Players", true);
+    private final Setting<Boolean> mobs = new Setting<>("Mobs", false);
+    private final Setting<Boolean> animals = new Setting<>("Animals", false);
+    private final Setting<Boolean> villagers = new Setting<>("Villagers", false);
+    private final Setting<Boolean> hostiles = new Setting<>("Hostiles", true);
+    private final Setting<Boolean> ignoreInvisible = new Setting<>("IgnoreInvisible", false);
+    private final Setting<Boolean> ignoreNamed = new Setting<>("IgnoreNamed", false);
+    private final Setting<Boolean> ignoreTeam = new Setting<>("IgnoreTeam", false);
+    private final Setting<Boolean> ignoreCreative = new Setting<>("IgnoreCreative", true);
+    private final Setting<Boolean> ignoreNaked = new Setting<>("IgnoreNaked", false);
     
-    // ===== VANILLA DISABLER =====
     private final Setting<Boolean> vanillaDisabler = new Setting<>("VanillaDisabler", false);
     private final Setting<Float> distancePerPacket = new Setting<>("DistancePerPacket", 10f, 1f, 20f, v -> vanillaDisabler.getValue());
     
-    // ===== АДАПТАЦИЯ ПОД FLIGHT/SPEED =====
     private final Setting<Boolean> adaptToSpeed = new Setting<>("AdaptToSpeed", true);
     private final Setting<Float> speedMultiplier = new Setting<>("SpeedMultiplier", 3.0f, 1.0f, 10.0f, v -> adaptToSpeed.getValue());
     private final Setting<Boolean> adaptToFlight = new Setting<>("AdaptToFlight", true);
     private final Setting<Float> flightMultiplier = new Setting<>("FlightMultiplier", 5.0f, 1.0f, 15.0f, v -> adaptToFlight.getValue());
     
-    // ===== КУЛДАУН =====
     private final Setting<Boolean> attackCooldown = new Setting<>("AttackCooldown", true);
     private final Setting<Integer> attackTickLimit = new Setting<>("AttackTickLimit", 11, 0, 20, v -> attackCooldown.getValue());
 
@@ -127,16 +120,12 @@ public class TPAura extends Module {
 
     private boolean isValidTarget(Entity entity) {
         if (entity == mc.player) return false;
-        if (!(entity instanceof LivingEntity living)) return false;
+        if (!(entity instanceof LivingEntity)) return false;
         if (!entity.isAlive()) return false;
         if (entity instanceof ArmorStandEntity) return false;
         
-        // Фильтр друзей (по умолчанию не бьём друзей)
-        if (entity instanceof PlayerEntity player && ModuleManager.friendManager.isFriend(player)) {
-            return false;
-        }
-        
         if (entity instanceof PlayerEntity player) {
+            if (ModuleManager.friendManager.isFriend(player)) return false;
             if (!players.getValue()) return false;
             if (player.isCreative() && ignoreCreative.getValue()) return false;
             if (player.isInvisible() && ignoreInvisible.getValue()) return false;
@@ -147,10 +136,7 @@ public class TPAura extends Module {
         } else if (entity instanceof MobEntity) {
             if (!mobs.getValue()) return false;
             if (entity instanceof AnimalEntity && !animals.getValue()) return false;
-            if (entity instanceof HostileEntity hostile) {
-                if (!hostiles.getValue()) return false;
-                if (onlyAngry.getValue() && !hostile.isAngryAt(mc.player)) return false;
-            }
+            if (entity instanceof HostileEntity && !hostiles.getValue()) return false;
         }
         
         if (entity.hasCustomName() && ignoreNamed.getValue()) return false;
