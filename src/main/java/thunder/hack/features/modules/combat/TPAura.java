@@ -11,6 +11,7 @@ import net.minecraft.entity.passive.VillagerEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
 import net.minecraft.util.math.Vec3d;
+import thunder.hack.core.Managers;
 import thunder.hack.core.manager.client.ModuleManager;
 import thunder.hack.events.impl.PlayerUpdateEvent;
 import thunder.hack.features.modules.Module;
@@ -125,7 +126,7 @@ public class TPAura extends Module {
         if (entity instanceof ArmorStandEntity) return false;
         
         if (entity instanceof PlayerEntity player) {
-            if (ModuleManager.friendManager.isFriend(player)) return false;
+            if (Managers.FRIEND.isFriend(player)) return false;
             if (!players.getValue()) return false;
             if (player.isCreative() && ignoreCreative.getValue()) return false;
             if (player.isInvisible() && ignoreInvisible.getValue()) return false;
