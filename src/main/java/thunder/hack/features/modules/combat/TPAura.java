@@ -3,6 +3,11 @@ package thunder.hack.features.modules.combat;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.decoration.ArmorStandEntity;
+import net.minecraft.entity.mob.HostileEntity;
+import net.minecraft.entity.mob.MobEntity;
+import net.minecraft.entity.passive.AnimalEntity;
+import net.minecraft.entity.passive.VillagerEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
 import net.minecraft.util.math.Vec3d;
@@ -28,7 +33,21 @@ public class TPAura extends Module {
     private final Setting<Boolean> rotate = new Setting<>("Rotate", true);
     private final Setting<Boolean> teleportBack = new Setting<>("TeleportBack", true);
     
-    // ===== VANILLA DISABLER (из LiquidBounce) =====
+    // ===== ФИЛЬТРЫ ЦЕЛЕЙ =====
+    private final Setting<SettingGroup> targets = new Setting<>("Targets", new SettingGroup(false, 0));
+    private final Setting<Boolean> players = new Setting<>("Players", true).addToGroup(targets);
+    private final Setting<Boolean> mobs = new Setting<>("Mobs", false).addToGroup(targets);
+    private final Setting<Boolean> animals = new Setting<>("Animals", false).addToGroup(targets);
+    private final Setting<Boolean> villagers = new Setting<>("Villagers", false).addToGroup(targets);
+    private final Setting<Boolean> hostiles = new Setting<>("Hostiles", true).addToGroup(targets);
+    private final Setting<Boolean> onlyAngry = new Setting<>("OnlyAngryHostiles", true, v -> hostiles.getValue()).addToGroup(targets);
+    private final Setting<Boolean> ignoreInvisible = new Setting<>("IgnoreInvisible", false).addToGroup(targets);
+    private final Setting<Boolean> ignoreNamed = new Setting<>("IgnoreNamed", false).addToGroup(targets);
+    private final Setting<Boolean> ignoreTeam = new Setting<>("IgnoreTeam", false).addToGroup(targets);
+    private final Setting<Boolean> ignoreCreative = new Setting<>("IgnoreCreative", true).addToGroup(targets);
+    private final Setting<Boolean> ignoreNaked = new Setting<>("IgnoreNaked", false).addToGroup(targets);
+    
+    // ===== VANILLA DISABLER =====
     private final Setting<Boolean> vanillaDisabler = new Setting<>("VanillaDisabler", false);
     private final Setting<Float> distancePerPacket = new Setting<>("DistancePerPacket", 10f, 1f, 20f, v -> vanillaDisabler.getValue());
     
@@ -38,15 +57,13 @@ public class TPAura extends Module {
     private final Setting<Boolean> adaptToFlight = new Setting<>("AdaptToFlight", true);
     private final Setting<Float> flightMultiplier = new Setting<>("FlightMultiplier", 5.0f, 1.0f, 15.0f, v -> adaptToFlight.getValue());
     
-    // ===== КУЛДАУН ИЗ КИЛЛАУРЫ =====
+    // ===== КУЛДАУН =====
     private final Setting<Boolean> attackCooldown = new Setting<>("AttackCooldown", true);
     private final Setting<Integer> attackTickLimit = new Setting<>("AttackTickLimit", 11, 0, 20, v -> attackCooldown.getValue());
 
     private final Timer timer = new Timer();
-    private final Timer attackTimer = new Timer();
     private Entity target;
     private Vec3d originalPos;
-    private Vec3d teleportPos;
     private int hitTicks = 0;
 
     @Override
@@ -55,11 +72,15 @@ public class TPAura extends Module {
         hitTicks = 0;
     }
 
+    @Override
+    public void onDisable() {
+        target = null;
+    }
+
     @EventHandler
     public void onUpdate(PlayerUpdateEvent e) {
         if (fullNullCheck()) return;
         
-        // Кулдаун из KillAura
         if (hitTicks > 0) {
             hitTicks--;
             return;
@@ -72,17 +93,13 @@ public class TPAura extends Module {
         if (!timer.passedMs(1000 / cps.getValue())) return;
 
         originalPos = mc.player.getPos();
-        teleportPos = getTeleportPosition(target, getDynamicAttackRange());
+        Vec3d teleportPos = getTeleportPosition(target, getDynamicAttackRange());
 
         if (teleportPos == null) return;
 
-        // Vanilla Disabler (перед телепортом спамим пакеты)
         if (vanillaDisabler.getValue()) {
             sendVanillaPackets();
         }
-
-        // PacketSpoof (всегда включён)
-        sendSpoofPackets();
         
         teleportTo(teleportPos);
         attack();
@@ -110,17 +127,38 @@ public class TPAura extends Module {
 
     private boolean isValidTarget(Entity entity) {
         if (entity == mc.player) return false;
-        if (!(entity instanceof LivingEntity)) return false;
+        if (!(entity instanceof LivingEntity living)) return false;
         if (!entity.isAlive()) return false;
-        if (entity instanceof PlayerEntity player && player.isCreative()) return false;
+        if (entity instanceof ArmorStandEntity) return false;
+        
+        // Фильтр друзей (по умолчанию не бьём друзей)
+        if (entity instanceof PlayerEntity player && ModuleManager.friendManager.isFriend(player)) {
+            return false;
+        }
+        
+        if (entity instanceof PlayerEntity player) {
+            if (!players.getValue()) return false;
+            if (player.isCreative() && ignoreCreative.getValue()) return false;
+            if (player.isInvisible() && ignoreInvisible.getValue()) return false;
+            if (player.getArmor() == 0 && ignoreNaked.getValue()) return false;
+            if (player.getTeamColorValue() == mc.player.getTeamColorValue() && ignoreTeam.getValue() && mc.player.getTeamColorValue() != 16777215) return false;
+        } else if (entity instanceof VillagerEntity && !villagers.getValue()) {
+            return false;
+        } else if (entity instanceof MobEntity) {
+            if (!mobs.getValue()) return false;
+            if (entity instanceof AnimalEntity && !animals.getValue()) return false;
+            if (entity instanceof HostileEntity hostile) {
+                if (!hostiles.getValue()) return false;
+                if (onlyAngry.getValue() && !hostile.isAngryAt(mc.player)) return false;
+            }
+        }
+        
+        if (entity.hasCustomName() && ignoreNamed.getValue()) return false;
         
         float currentRange = getDynamicRange();
         if (mc.player.distanceTo(entity) > currentRange) return false;
         
-        // Проверка на стену (если за стеной — пропускаем)
-        if (!mc.player.canSee(entity)) return false;
-        
-        return true;
+        return mc.player.canSee(entity);
     }
     
     private float getDynamicRange() {
@@ -156,17 +194,6 @@ public class TPAura extends Module {
         
         for (int i = 0; i < packets; i++) {
             sendPacket(new PlayerMoveC2SPacket.OnGroundOnly(true));
-        }
-    }
-    
-    private void sendSpoofPackets() {
-        for (int i = 0; i < 5; i++) {
-            sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(
-                mc.player.getX(),
-                mc.player.getY() + 0.001 * i,
-                mc.player.getZ(),
-                true
-            ));
         }
     }
 
@@ -207,7 +234,6 @@ public class TPAura extends Module {
 
         mc.interactionManager.attackEntity(mc.player, target);
         mc.player.swingHand(net.minecraft.util.Hand.MAIN_HAND);
-        attackTimer.reset();
     }
 
     private float[] getRotations(Entity target) {
@@ -221,5 +247,13 @@ public class TPAura extends Module {
         double pitch = -Math.toDegrees(Math.atan2(diffY, Math.hypot(diffX, diffZ)));
 
         return new float[]{(float) yaw, (float) pitch};
+    }
+    
+    @Override
+    public String getDisplayInfo() {
+        if (target instanceof PlayerEntity player) {
+            return player.getName().getString();
+        }
+        return null;
     }
 }
