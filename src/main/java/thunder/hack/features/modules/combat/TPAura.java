@@ -59,21 +59,26 @@ public class TPAura extends Module {
     private Entity target;
     private Vec3d originalPos;
     private int hitTicks = 0;
+    private boolean isActive = false;
 
     @Override
     public void onEnable() {
         target = null;
         hitTicks = 0;
+        isActive = true;
     }
 
     @Override
     public void onDisable() {
+        isActive = false;
         target = null;
     }
 
     @EventHandler
     public void onUpdate(PlayerUpdateEvent e) {
+        if (!isActive) return;
         if (fullNullCheck()) return;
+        if (mc.player.networkHandler == null) return;
         
         if (hitTicks > 0) {
             hitTicks--;
@@ -171,6 +176,9 @@ public class TPAura extends Module {
     }
 
     private void sendVanillaPackets() {
+        if (!isActive) return;
+        if (mc.player.networkHandler == null) return;
+        
         double distance = Math.sqrt(
             Math.pow(mc.player.getX() - mc.player.prevX, 2) +
             Math.pow(mc.player.getY() - mc.player.prevY, 2) +
@@ -180,11 +188,15 @@ public class TPAura extends Module {
         int packets = (int) (distance / distancePerPacket.getValue());
         
         for (int i = 0; i < packets; i++) {
+            if (!isActive) return;
             sendPacket(new PlayerMoveC2SPacket.OnGroundOnly(true));
         }
     }
 
     private void teleportTo(Vec3d pos) {
+        if (!isActive) return;
+        if (mc.player.networkHandler == null) return;
+        
         mc.player.setPosition(pos.x, pos.y, pos.z);
         sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(pos.x, pos.y, pos.z, false));
     }
@@ -213,6 +225,7 @@ public class TPAura extends Module {
 
     private void attack() {
         if (target == null) return;
+        if (!isActive) return;
 
         if (rotate.getValue()) {
             float[] rotations = getRotations(target);
