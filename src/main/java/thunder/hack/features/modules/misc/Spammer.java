@@ -1,7 +1,5 @@
 package thunder.hack.features.modules.misc;
 
-import thunder.hack.core.Managers;
-import thunder.hack.features.hud.impl.StaffBoard;
 import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
 import thunder.hack.utility.Timer;
@@ -9,19 +7,16 @@ import thunder.hack.utility.Timer;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Random;
 
 import static thunder.hack.features.modules.client.ClientSettings.isRu;
 
 public class Spammer extends Module {
     public static ArrayList<String> SpamList = new ArrayList<>();
-    public Setting<Mode> mode = new Setting<>("mode", Mode.Chat);
-    public Setting<Messages> messages = new Setting<>("messages", Messages.File);
-    public Setting<WhisperPrefix> whisper_prefix = new Setting<>("prefix", WhisperPrefix.W, v -> mode.getValue() == Mode.Whispers);
-    public Setting<Boolean> global = new Setting<>("global", true, v -> mode.getValue() == Mode.Chat);
+    public Setting<Boolean> global = new Setting<>("global", true);
     public Setting<Boolean> antiSpam = new Setting<>("AntiSpam", false);
     public Setting<Float> delay = new Setting<>("delay", 5f, 0f, 30f);
+    
     private final Timer timer_delay = new Timer();
     private final Random random = new Random();
 
@@ -80,17 +75,6 @@ public class Spammer extends Module {
         }
     }
 
-    public String getPlayerName() {
-        try {
-            List<String> list = StaffBoard.getOnlinePlayer();
-            if (list.isEmpty())
-                return "";
-            return list.get(random.nextInt(0, list.size() - 1));
-        } catch (NullPointerException e) {
-            return null;
-        }
-    }
-
     public static String generateRandomSymbol() {
         Random random = new Random();
         String randomSymbol = "[";
@@ -109,49 +93,25 @@ public class Spammer extends Module {
     @Override
     public void onUpdate() {
         if (timer_delay.passedMs((long) (delay.getValue() * 1000))) {
-            String c;
-            if (messages.getValue() == Messages.File) {
-                if (SpamList.isEmpty()) {
-                    disable(isRu() ? "Файл spammer пустой! minecraft\thunderhackrecode\spammer.txt" : "The spammer file is empty! minecraft\thunderhackrecode\spammer.txt");
-                    return;
-                }
-                c = SpamList.get(new Random().nextInt(SpamList.size()));
-            } else {
+            if (SpamList.isEmpty()) {
+                disable(isRu() ? "Файл spammer пустой!" : "The spammer file is empty!");
                 return;
             }
+            
+            String c = SpamList.get(random.nextInt(SpamList.size()));
+            
             if (antiSpam.getValue()) {
                 c += generateRandomSymbol();
             }
-            if (mode.getValue() == Mode.Chat) {
-                if (c.charAt(0) == '/') {
-                    c = c.replace("/", "");
-                    mc.player.networkHandler.sendCommand(c);
-                } else mc.player.networkHandler.sendChatMessage(global.getValue() ? "!" + c : c);
+            
+            if (c.charAt(0) == '/') {
+                c = c.replace("/", "");
+                mc.player.networkHandler.sendCommand(c);
             } else {
-                try {
-                    String prefix = whisper_prefix.getValue().prefix;
-                    mc.player.networkHandler.sendCommand(prefix + getPlayerName() + " " + c);
-                } catch (NullPointerException e) {
-                }
+                mc.player.networkHandler.sendChatMessage(global.getValue() ? "!" + c : c);
             }
 
             timer_delay.reset();
-        }
-    }
-
-    private enum Messages {File}
-
-    private enum Mode {Chat, Whispers}
-
-    private enum WhisperPrefix {
-        W("w "),
-        Msg("msg "),
-        Tell("tell ");
-
-        final String prefix;
-
-        WhisperPrefix(String p) {
-            prefix = p;
         }
     }
 }
