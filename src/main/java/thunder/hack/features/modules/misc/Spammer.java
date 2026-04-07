@@ -110,7 +110,7 @@ public class Spammer extends Module {
     public void onUpdate() {
         if (timer_delay.passedMs((long) (delay.getValue() * 1000))) {
             if (SpamList.isEmpty()) {
-                disable(isRu() ? "Вставь фразочки в minecraft\thunderhackrecode\mist\spammer.txt" : "The spammer file is empty! minecraft\thunderhackrecode\mist\spammer.txt");
+                disable(isRu() ? "Вставь фразочки в minecraft thunderhackrecode misc spammer.txt" : "The spammer file is empty! minecraft thunderhackrecode misc spammer.txt");
                 return;
             }
             
