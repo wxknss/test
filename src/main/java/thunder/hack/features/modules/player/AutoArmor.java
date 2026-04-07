@@ -1,7 +1,6 @@
 package thunder.hack.features.modules.player;
 
 import net.minecraft.client.gui.screen.ChatScreen;
-import net.minecraft.component.ComponentType;
 import net.minecraft.component.type.ItemEnchantmentsComponent;
 import net.minecraft.enchantment.Enchantment;
 import net.minecraft.enchantment.EnchantmentHelper;
@@ -11,7 +10,6 @@ import net.minecraft.item.ArmorItem;
 import net.minecraft.item.ElytraItem;
 import net.minecraft.item.ItemStack;
 import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.screen.slot.SlotActionType;
 import thunder.hack.core.manager.client.ModuleManager;
 import thunder.hack.gui.clickui.ClickGUI;
 import thunder.hack.gui.hud.HudEditorGui;
@@ -64,7 +62,7 @@ public class AutoArmor extends Module {
             return;
 
         for (EquipmentSlot slot : EquipmentSlot.values()) {
-            if (slot.getType() != EquipmentSlot.Type.ARMOR) continue;
+            if (slot != EquipmentSlot.HEAD && slot != EquipmentSlot.CHEST && slot != EquipmentSlot.LEGS && slot != EquipmentSlot.FEET) continue;
 
             ItemStack currentStack = mc.player.getEquippedStack(slot);
             int currentValue = getArmorValue(currentStack, slot);
