@@ -32,6 +32,7 @@ public class TPAura extends Module {
     private final Setting<Integer> cps = new Setting<>("CPS", 10, 1, 20);
     private final Setting<Boolean> rotate = new Setting<>("Rotate", true);
     private final Setting<Boolean> teleportBack = new Setting<>("TeleportBack", true);
+    private final Setting<Boolean> vanillaDisabler = new Setting<>("VanillaDisabler", true);
     
     private final Setting<Boolean> players = new Setting<>("Players", true);
     private final Setting<Boolean> mobs = new Setting<>("Mobs", false);
@@ -65,14 +66,6 @@ public class TPAura extends Module {
         target = null;
     }
 
-    @Override
-    public void onLogin() {
-    }
-
-    @Override
-    public void onLogout() {
-    }
-
     @EventHandler
     public void onUpdate(PlayerUpdateEvent e) {
         if (fullNullCheck()) return;
@@ -93,6 +86,12 @@ public class TPAura extends Module {
         Vec3d teleportPos = getTeleportPosition(target, getDynamicAttackRange());
 
         if (teleportPos == null) return;
+
+        if (vanillaDisabler.getValue()) {
+            for (int i = 0; i < 3; i++) {
+                sendPacket(new PlayerMoveC2SPacket.OnGroundOnly(true));
+            }
+        }
         
         teleportTo(teleportPos);
         attack();
@@ -144,7 +143,7 @@ public class TPAura extends Module {
         float currentRange = getDynamicRange();
         if (mc.player.distanceTo(entity) > currentRange) return false;
         
-        return mc.player.canSee(entity);
+        return true;
     }
     
     private float getDynamicRange() {
