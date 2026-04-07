@@ -30,7 +30,6 @@ public class ModuleManager implements IManager {
     public List<Module> sortedModules = new ArrayList<>();
     public List<Integer> activeMouseKeys = new ArrayList<>();
     
-    public static PenisESP penisESP = new PenisESP();
     public static AntiPacketException antiPacketException = new AntiPacketException();
     public static LevitationControl levitationControl = new LevitationControl();
     public static InventoryCleaner inventoryCleaner = new InventoryCleaner();
@@ -203,7 +202,6 @@ public class ModuleManager implements IManager {
     public static SoundFX soundFX = new SoundFX();
     public static AutoBed autoBed = new AutoBed();
     public static TNTAura tntAura = new TNTAura();
-    public static VoidESP voidESP = new VoidESP();
     public static Tracker tracker = new Tracker();
     public static TpsSync tpsSync = new TpsSync();
     public static Spammer spammer = new Spammer();
@@ -223,7 +221,6 @@ public class ModuleManager implements IManager {
     public static AntiAim antiAim = new AntiAim();
     public static AutoSex autoSex = new AutoSex();
     public static Tracers tracers = new Tracers();
-    public static Parkour parkour = new Parkour();
     public static ClickTP clickTP = new ClickTP();
     public static TPAura tpAura = new TPAura();
     public static BowPop bowPop = new BowPop();
