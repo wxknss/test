@@ -1,17 +1,17 @@
 package thunder.hack.features.modules.player;
 
 import net.minecraft.client.gui.screen.ChatScreen;
+import net.minecraft.component.ComponentType;
 import net.minecraft.component.type.ItemEnchantmentsComponent;
+import net.minecraft.enchantment.Enchantment;
 import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.enchantment.Enchantments;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.item.ArmorItem;
 import net.minecraft.item.ElytraItem;
 import net.minecraft.item.ItemStack;
-import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
-import net.minecraft.network.packet.c2s.play.CloseHandledScreenC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerInteractItemC2SPacket;
-import net.minecraft.util.Hand;
+import net.minecraft.registry.entry.RegistryEntry;
+import net.minecraft.screen.slot.SlotActionType;
 import thunder.hack.core.manager.client.ModuleManager;
 import thunder.hack.gui.clickui.ClickGUI;
 import thunder.hack.gui.hud.HudEditorGui;
@@ -39,8 +39,11 @@ public class AutoArmor extends Module {
     private final Setting<Boolean> noMove = new Setting<>("NoMove", false);
     private final Setting<Boolean> ignoreCurse = new Setting<>("IgnoreCurse", true);
     private final Setting<Boolean> strict = new Setting<>("Strict", false);
+    private final Setting<Mode> mode = new Setting<>("Mode", Mode.Basic);
+    private final Setting<Boolean> fakeItemsBypass = new Setting<>("FakeItemsBypass", false);
 
     private int tickDelay = 0;
+    private long[] lastSlotChangeTime = new long[45];
 
     List<ArmorData> armorList = Arrays.asList(
             new ArmorData(EquipmentSlot.FEET, 36, -1, -1, -1),
@@ -51,113 +54,147 @@ public class AutoArmor extends Module {
 
     @Override
     public void onUpdate() {
+        if (mode.getValue() == Mode.OpenInv && !(mc.currentScreen instanceof ChatScreen) && !(mc.currentScreen instanceof ClickGUI) && !(mc.currentScreen instanceof HudEditorGui) && mc.currentScreen != null)
+            return;
+
         if (mc.currentScreen != null && pauseInventory.getValue() && !(mc.currentScreen instanceof ChatScreen) && !(mc.currentScreen instanceof ClickGUI) && !(mc.currentScreen instanceof HudEditorGui))
             return;
 
         if (tickDelay-- > 0)
             return;
 
-        armorList.forEach(ArmorData::reset);
+        for (EquipmentSlot slot : EquipmentSlot.values()) {
+            if (slot.getType() != EquipmentSlot.Type.ARMOR) continue;
 
-        for (int i = 0; i < 36; i++) {
-            ItemStack stack = mc.player.getInventory().getStack(i);
-            int prot = getProtection(stack);
-            if (prot > 0)
-                for (ArmorData e : armorList) {
-                    if (e.getEquipmentSlot() == (stack.getItem() instanceof ArmorItem ai ? ai.getSlotType() : EquipmentSlot.CHEST))
-                        if (prot > e.getPrevProt() && prot > e.getNewProtection()) {
-                            e.setNewSlot(i);
-                            e.setNewProtection(prot);
-                        }
+            ItemStack currentStack = mc.player.getEquippedStack(slot);
+            int currentValue = getArmorValue(currentStack, slot);
+
+            int bestSlot = -1;
+            int bestValue = currentValue;
+
+            for (int i = 0; i < 36; i++) {
+                ItemStack stack = mc.player.getInventory().getStack(i);
+                if (isValidForSlot(stack, slot)) {
+                    if (fakeItemsBypass.getValue() && System.currentTimeMillis() - lastSlotChangeTime[i] < 1500)
+                        continue;
+
+                    int value = getArmorValue(stack, slot);
+                    if (value > bestValue) {
+                        bestValue = value;
+                        bestSlot = i;
+                    }
                 }
-        }
+            }
 
-        for (ArmorData armorPiece : armorList) {
-            int slot = armorPiece.getNewSlot();
-            if (slot != -1) {
-                if ((armorPiece.getPrevProt() == -1 || !oldVersion.getValue()) && slot < 9) {
-                    InventoryUtility.saveAndSwitchTo(slot);
-                    sendSequencedPacket(id -> new PlayerInteractItemC2SPacket(Hand.MAIN_HAND, id, mc.player.getYaw(), mc.player.getPitch()));
-                    InventoryUtility.returnSlot();
-                } else {
-                    if (MovementUtility.isMoving() && noMove.getValue())
-                        return;
+            if (bestSlot != -1) {
+                if (MovementUtility.isMoving() && noMove.getValue())
+                    return;
 
-                    int newArmorSlot = slot < 9 ? 36 + slot : slot;
-
-                    if(strict.getValue())
-                        sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.STOP_SPRINTING));
-
-                    clickSlot(newArmorSlot);
-                    clickSlot((armorPiece.getArmorSlot() - 34) + (39 - armorPiece.getArmorSlot()) * 2);
-                    if (armorPiece.getPrevProt() != -1)
-                        clickSlot(newArmorSlot);
-
-                    sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
-                }
-
+                equipArmor(bestSlot, slot);
                 tickDelay = delay.getValue();
+                lastSlotChangeTime[bestSlot] = System.currentTimeMillis();
                 return;
             }
         }
     }
 
-    private int getProtection(ItemStack is) {
-        if (is.getItem() instanceof ArmorItem || is.getItem() instanceof ElytraItem) {
-            int prot = 0;
+    private boolean isValidForSlot(ItemStack stack, EquipmentSlot slot) {
+        if (stack.isEmpty()) return false;
 
-            EquipmentSlot slot = is.getItem() instanceof ArmorItem ai ? ai.getSlotType() : EquipmentSlot.BODY;
+        if (stack.getItem() instanceof ElytraItem) {
+            if (slot != EquipmentSlot.CHEST) return false;
+            if (elytraPriority.getValue() == ElytraPriority.Ignore) return false;
+            if (elytraPriority.getValue() == ElytraPriority.OnUse && !mc.player.isFallFlying()) return false;
+            return true;
+        }
 
-            if (is.getItem() instanceof ElytraItem) {
-                if (!ElytraItem.isUsable(is))
-                    return 0;
+        if (!(stack.getItem() instanceof ArmorItem armor)) return false;
+        return armor.getSlotType() == slot;
+    }
 
-                boolean ePlus = elytraPriority.is(ElytraPriority.ElytraPlus) && (ModuleManager.elytraRecast.isEnabled() || ModuleManager.elytraPlus.isEnabled());
-                boolean ignore = elytraPriority.is(ElytraPriority.Ignore) && mc.player.getInventory().getStack(38).getItem() instanceof ElytraItem;
+    private int getArmorValue(ItemStack stack, EquipmentSlot slot) {
+        if (stack.isEmpty()) return -1;
 
-                if (ePlus || ignore || elytraPriority.is(ElytraPriority.Always))
-                    prot = 999;
-            }
+        if (stack.getItem() instanceof ElytraItem) {
+            return 1000;
+        }
 
-            int blastMultiplier = 1;
+        if (!(stack.getItem() instanceof ArmorItem armor)) return -1;
+        if (armor.getSlotType() != slot) return -1;
+
+        int value = armor.getProtection() * 10 + (int) Math.ceil(armor.getToughness());
+
+        if (stack.hasEnchantments()) {
+            ItemEnchantmentsComponent enchants = EnchantmentHelper.getEnchantments(stack);
+
+            RegistryEntry<Enchantment> protection = mc.world.getRegistryManager().get(Enchantments.PROTECTION.getRegistryRef()).getEntry(Enchantments.PROTECTION).get();
+            RegistryEntry<Enchantment> blastProtection = mc.world.getRegistryManager().get(Enchantments.BLAST_PROTECTION.getRegistryRef()).getEntry(Enchantments.BLAST_PROTECTION).get();
+            RegistryEntry<Enchantment> fireProtection = mc.world.getRegistryManager().get(Enchantments.FIRE_PROTECTION.getRegistryRef()).getEntry(Enchantments.FIRE_PROTECTION).get();
+            RegistryEntry<Enchantment> projectileProtection = mc.world.getRegistryManager().get(Enchantments.PROJECTILE_PROTECTION.getRegistryRef()).getEntry(Enchantments.PROJECTILE_PROTECTION).get();
+            RegistryEntry<Enchantment> bindingCurse = mc.world.getRegistryManager().get(Enchantments.BINDING_CURSE.getRegistryRef()).getEntry(Enchantments.BINDING_CURSE).get();
+
             int protectionMultiplier = 1;
+            int blastMultiplier = 1;
 
             switch (slot) {
-                case HEAD -> {
-                    if(head.is(EnchantPriority.Protection)) protectionMultiplier *= 2;
-                    else blastMultiplier *= 2;
-                }
-                case BODY -> {
-                    if(body.is(EnchantPriority.Protection)) protectionMultiplier *= 2;
-                    else blastMultiplier *= 2;
-                }
-                case LEGS -> {
-                    if(tights.is(EnchantPriority.Protection)) protectionMultiplier *= 2;
-                    else blastMultiplier *= 2;
-                }
-                case FEET -> {
-                    if(feet.is(EnchantPriority.Protection)) protectionMultiplier *= 2;
-                    else blastMultiplier *= 2;
-                }
+                case HEAD:
+                    if (head.getValue() == EnchantPriority.Protection) protectionMultiplier = 2;
+                    else blastMultiplier = 2;
+                    break;
+                case CHEST:
+                    if (body.getValue() == EnchantPriority.Protection) protectionMultiplier = 2;
+                    else blastMultiplier = 2;
+                    break;
+                case LEGS:
+                    if (tights.getValue() == EnchantPriority.Protection) protectionMultiplier = 2;
+                    else blastMultiplier = 2;
+                    break;
+                case FEET:
+                    if (feet.getValue() == EnchantPriority.Protection) protectionMultiplier = 2;
+                    else blastMultiplier = 2;
+                    break;
             }
 
-            if (is.hasEnchantments()) {
-                ItemEnchantmentsComponent enchants = EnchantmentHelper.getEnchantments(is);
+            if (enchants.getEnchantments().contains(protection))
+                value += enchants.getLevel(protection) * 20 * protectionMultiplier;
 
-                //mc.world.getRegistryManager().get(Enchantments.BLAST_PROTECTION.getRegistryRef()).getEntry(Enchantments.BLAST_PROTECTION).get()
-                if (enchants.getEnchantments().contains(mc.world.getRegistryManager().get(Enchantments.PROTECTION.getRegistryRef()).getEntry(Enchantments.PROTECTION).get()))
-                    prot += enchants.getLevel(mc.world.getRegistryManager().get(Enchantments.PROTECTION.getRegistryRef()).getEntry(Enchantments.PROTECTION).get()) * protectionMultiplier;
+            if (enchants.getEnchantments().contains(blastProtection))
+                value += enchants.getLevel(blastProtection) * 15 * blastMultiplier;
 
-                if (enchants.getEnchantments().contains(mc.world.getRegistryManager().get(Enchantments.BLAST_PROTECTION.getRegistryRef()).getEntry(Enchantments.BLAST_PROTECTION).get()))
-                    prot += enchants.getLevel(mc.world.getRegistryManager().get(Enchantments.BLAST_PROTECTION.getRegistryRef()).getEntry(Enchantments.BLAST_PROTECTION).get()) * blastMultiplier;
+            if (enchants.getEnchantments().contains(fireProtection))
+                value += enchants.getLevel(fireProtection) * 15;
 
-                if (enchants.getEnchantments().contains(mc.world.getRegistryManager().get(Enchantments.BLAST_PROTECTION.getRegistryRef()).getEntry(Enchantments.BINDING_CURSE).get()) && ignoreCurse.getValue())
-                    prot = -999;
-            }
+            if (enchants.getEnchantments().contains(projectileProtection))
+                value += enchants.getLevel(projectileProtection) * 15;
 
-            return (is.getItem() instanceof ArmorItem armorItem ? (armorItem.getProtection() + (int) Math.ceil(armorItem.getToughness())) * 10 : 0) + prot;
-        } else if (!is.isEmpty()) return 0;
-        return -1;
+            if (enchants.getEnchantments().contains(bindingCurse) && !ignoreCurse.getValue())
+                return -999;
+        }
+
+        int durability = stack.getMaxDamage() - stack.getDamage();
+        value += (durability * 10 / stack.getMaxDamage());
+
+        return value;
+    }
+
+    private void equipArmor(int slot, EquipmentSlot armorSlot) {
+        int armorInventorySlot = 36 + armorSlot.getEntitySlotId();
+
+        if (slot < 9) {
+            InventoryUtility.saveAndSwitchTo(slot);
+            sendSequencedPacket(id -> new net.minecraft.network.packet.c2s.play.PlayerInteractItemC2SPacket(net.minecraft.util.Hand.MAIN_HAND, id, mc.player.getYaw(), mc.player.getPitch()));
+            InventoryUtility.returnSlot();
+        } else {
+            if (strict.getValue())
+                sendPacket(new net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket(mc.player, net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket.Mode.STOP_SPRINTING));
+
+            clickSlot(slot);
+            clickSlot(armorInventorySlot);
+            if (mc.player.getInventory().getStack(armorInventorySlot).isEmpty())
+                clickSlot(slot);
+
+            sendPacket(new net.minecraft.network.packet.c2s.play.CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
+        }
     }
 
     public class ArmorData {
@@ -205,17 +242,21 @@ public class AutoArmor extends Module {
         }
 
         public void reset() {
-            setPrevProt(getProtection(mc.player.getInventory().getStack(getArmorSlot())));
+            setPrevProt(getArmorValue(mc.player.getInventory().getStack(getArmorSlot()), getEquipmentSlot()));
             setNewSlot(-1);
             setNewProtection(-1);
         }
     }
 
     private enum ElytraPriority {
-        None, Always, ElytraPlus, Ignore
+        Ignore, Always, OnUse
     }
 
     private enum EnchantPriority {
         Blast, Protection
+    }
+
+    private enum Mode {
+        Basic, OpenInv
     }
 }
