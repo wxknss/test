@@ -2,6 +2,7 @@ package thunder.hack.features.modules.misc;
 
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.network.packet.s2c.play.GameMessageS2CPacket;
+import thunder.hack.core.Managers;
 import thunder.hack.events.impl.EventDeath;
 import thunder.hack.events.impl.PacketEvent;
 import thunder.hack.features.modules.Module;
@@ -26,35 +27,34 @@ public final class AutoEZ extends Module {
 
     String[] EZ = new String[]{
             "EZZZZZZZZZ проглотив хуй скажешь что? или молча будешь это делать",
-            "ПАПУСЯНКА СЛАБАЯ %player% ПАПУСЯНАЯ",
-            "%player% ТЫ ЛАШНЯ ВЕПИРОМОЗГЛАЯ СЛИТЫЙ ХААХАХАХ",
+            "ПАПУСЯНКА СЛАБАЯ %player% ПАПУСЯНКА ИГРАТЬ НЕ УМЕЕШЬ НУБЛАНИНА НУБАСОСИНА НУБША НУБЛАНИЩЕ НУБСТВО ТЫ ПОЛНОЕ",
             "ТЫ НАСТОЛЬКО БОМЖИК %player% ЧТО ДАЖЕ КАПС ЛОКА У ТЕБЯ НЕТ НА КЛАВИАТУРЕ",
-            "м%player% м тут ты так красиво пал правда как лоооох лашня ужас просто кошмар какой то",
+            "%player% мм тут ты так красиво пал правда как лооох лашня ужас просто кошмар какой то",
             "%player% посмотри назад ХАХА на тебя голуби насряяялиииии",
-            "%player%ЕЗЕЗЕЗЕЕЗЕЗЕЗЕЗЕЗЕЕЗЕЗЗ ЕЗЕЗЕЗЗЕЗЕЗЗЗЗ БЛЯЯЯЯ ХАЭВХААЭВХАЩАЫХЫЗ EZZZZZZZZZZZZZZZZZZ",
+            "%player% ЕЗЕЗЕЗЕЕЗЕЗЕЗЕЗЕЗЕЕЗЕЗЗ ЕЗЕЗЕЗЗЕЗЕЗЗЗЗ БЛЯЯЯ ХАВХАВХААЫХЫЗХ EZZZZZZZZZZZZZZZZZZ",
             "%player% ты легкииииий у тебя даже залупосракояльница в носу вылезай из люка или тебе вкусно в канализации воду пить",
             "%player% восьмитазовоканальный ты широкодырожопный человечик в грязой одежде и спящий в мусорном пакете",
-            "%player% господи ты слился словно димонопроебонизмокислотноушепьющепотолочноблядовидносвиноеботальнобезмзоглохуесанскошлюхорототель",
+            "%player% пиздец ты слился словно димонопроебонизмокислотноушепьющепотолочноблядовидносвиноеботальнобезмзоглохуесанскошлюхорототель",
             "ТЫЫЫЫЫЫЫ %player% НЮХААЕШШЬЬ ЦВЕТЫЫЫ %player% ромашка не моя жопа нюхает твояяяяяяя %player%",
             "%player% ТЕБЕ ТОЛЬКО С БУДИЛЬНИКОМ СВОИМ ПВПХАТЬСЯ ХАВХАВХ",
             "%player% тебе не стыдно пить зеленку и запивать ее из одуванчиков и лапухов?",
             "%player% Я СТАНУ ДЛЯ ТЕБЯ ЗУБНЫМ ВРАЧЕМ ХАВХЫВХИХЫХАЗХИХВ",
             "%player% У ТЕБЯ БАТАРЕЙКИ КОНЧИЛИСЬ ОТ МОЗГОВ И ТЫ НАСТОЛЬКО ЛЕГКО ТАК СДОХ",
-            "%player% ТРАХАЙСЯ С АВТОБУСАМИ НЕМОЩНЫЙ СЕКС У ТЕБЯ ВСЮ ЖИЗНЬ С АВТОБУСАМИ БЛЯТЬ ХВАХЫФВЗАЫВЗВЫЗХАВЗХВА",
+            "%player% ТРАХАЙСЯ С АВТОБУСАМИ НЕМОЩНЫЙ СЕКС У ТЕБЯ ВСЮ ЖИЗНЬ С АВТОБУСАМИ БЛЯТЬ ХВАХЫФВЗАЫВЗВЫЗХАВЗХВАХ",
             "%player% ЛЕЖАТЬ НА СПАВНЕ ГУСЕНИЦА ВУПСЕНЬ И ПУПСЕНЬ БЕГИ К ЛУНТИКУ В ДУПЛО ПОД СТОЛ",
             "%player% ПОЧЕМУ ТЫ ТАКОЙ ЛЕГКИЙ ЧТО ПРЯМО УМОЛЯЕШЬ ОТДАТЬ СВОЙ ДНЕВНИЙ ШКОЛЬНЫЙ?",
             "%player% КУШАЙ СЕБЯ БОБРОСУСЛИК АСТАСВИНОПАЛОЧНОБИХИМИДОПИРИДОВЫЙ БАШМАКОБУТЫЛОЧНОЖОПОСАДЯЩИЙСЯ ОТХУЕСАРАЕСАСЫВАТЕЛЬ",
-            "%player% НА КОЛЕНИ ПАДАЙ ЕЗЗКА С ФЛЮКСОМ Я ЛУЧШЕ БЛЯТЬ ДАЖЕ С ДЕРЕВОМ ПОДЕРУСЬ ОНО БУДЕТ СИЛЬНЕЕ ТЕБЯ",
             "%player% ТЫ 0 ЗХАВВЗХВПАЗХАЗВХЗХПАВАЗХ %player% 00000000000000000000000000 %player% биомусорничный лох",
-            "Ты летающая книга по литературе тебя даже по телевизору показали %player% рекламе телевикторины",
-            "автомобильное радио сообщает вам %player% очень важную информацию для вас чтобы вы умерли в майнкрафте",
-            "%player% кошмар ты так умер легко что даже от страха не возраждаешься и читаешь это шас же ответишь",
+            "ты летающая книга по литературе тебя даже по телевизору показали %player% в рекламе телевикторины",
+            "автомобильное радио сообщает вам %player% очень важную информацию для вас чтобы вы слились в майнкрафте",
+            "%player% кошмар ты так слился легко что даже от страха не возраждаешься и читаешь это шас же ответишь",
             "%player% плохую ты музыку слушаешь волосы плохо лежат свет в комнате твой вообще плохой",
             "%player% ежели вы являяетесь диким животным то напишите пожалуйста или приказываю в чат вашу злость вы же раб и послушаетесь уже пишешь верно ужас",
-            "ХУЙ САСНИ И ДАВОЛЬНИЙ ХАДЫЫ %player% А КОГДА ТЫ БЫЛ МАЛАДЫМ ТИ НИ ЛЮБИЛ И НЕ ДРАЧЫЛ",
-            "%player% часть сыра много много много сыраа прям кошмар дырок вкусный ты был вчера теперь тебя больше нет БОЛЬШЕЕЕ НЕЕТ БОЛЬШЕ НЕЕЕЕЕЕЕЕТТТТ БЛЯЯЯЯЯ",
-            "ДУШИТЬ ТЕБЯ В ВАННОЙ %player% И СНИМАААТЬ СВААЮ УСТАЛАСТЬ %player% ТРАХАЕТСЯ В РОТ С %player% ХАХАХАХАХ БУДЬ ФАНАТОМ КРИСТИНКИ",
+            "ХУЙ САСНИ И ДАВОЛЬНИЙ ХАДЫЫЫ %player% А КОГДА ТЫ БЫЛ МАЛАДЫМ ТИ НИ ЛЮБИЛ И НЕ ДРАЧЫЛ",
+            "%player% часть сыра много много много сырааа прям кошмар дырок вкусный ты был вчера теперь тебя больше нет БОЛЬШЕЕЕ НЕТ БОЛЬШЕ НЕЕЕЕЕЕЕЕТТТ БЛЯЯЯЯЯ",
+            "ДУШИТЬ ТЕБЯ В ВАННОЙ %player% И СНИМАААТЬ СВАААЮ УСТАЛАСТЬ %player% ТРАХАЕТСЯ В РОТ С %player% ХАХАХАХАХ БУДЬ ФАНАТОМ КРИСТИНКИ ТЫ НИЩИЙ НОГАМИ ИГРАЕШЬ СЛАБОСТЬ ТУПАЯ",
             "%player% ЧИТ НАСТРОЙ БЛЯ ИДИ ВЫЙГРАЙ ПВП ПРОТИВ НПС ВЕЩИ ДЬЯВОЛА И С ДЕДОМ МОРОЗОМ ЕЩЕ ПОПРОБУЙ ВДРУГ НЕ СОЛЬЕШЬСЯ ЕМУ ПЕРЕСИДИ ЕГО ДОЖДИСЬ КОГДА УЙДУТ ЕСЛИ НЕ ЛОХ ХД",
+            "%player% ТЫ НАСТОЛЬКО БЛЯТЬ СЛАБАЯ ХУЕПРИЕМНИЦА ТЕРПИЛЬНИЦА ЧТО ДАЖЕ ОДНО ХП НЕ СНЕСЛА ХЗЫВХЗЫХВ ПИЗДЕЦ ТЫ СЛАБОСТЬ ЕБАННАЯ",
             "%player% ДОПАРКИНСОНИЛСЯ ДО ПОЛЕТА В КОСМАС И НА СПАВН НЕ ВЗЛЕТЕВ НА ТОПЛИВЕ ИЗ СВОЕЙ ЖОПЫ ВО ВРЕМЯ БОМБЕЖА"
     };
 
@@ -129,25 +129,26 @@ public final class AutoEZ extends Module {
             String message = packet.content().getString();
             String killedName = null;
             
-            // Режим Universal - не обрабатываем пакеты
             if (server.getValue() == ServerMode.Universal) {
                 return;
             }
             
-            // Режим FunnyGame
             if (server.getValue() == ServerMode.FunnyGame) {
                 if (message.contains("Вы убили игрока")) {
                     killedName = ThunderUtility.solveName(message);
                     if (Objects.equals(killedName, "FATAL ERROR")) return;
+                    if (killedName.equalsIgnoreCase(mc.player.getName().getString())) return;
+                    if (Managers.FRIEND.isFriend(killedName)) return;
                     sayEZ(killedName);
                     ezTimer.reset();
                 }
                 return;
             }
             
-            // Режим BedWars
             if (server.getValue() == ServerMode.BedWars) {
-                if (message.contains("BedWars") && message.contains("убил") && message.contains(mc.player.getName().getString())) {
+                String myName = mc.player.getName().getString();
+                
+                if (message.contains("BedWars") && message.contains("убил") && message.contains(myName)) {
                     try {
                         String afterPrefix = message.substring(message.indexOf("»") + 2);
                         String[] parts = afterPrefix.split("убил");
@@ -155,21 +156,33 @@ public final class AutoEZ extends Module {
                             killedName = parts[1].trim().replace("!", "");
                         }
                     } catch (Exception ignored) {}
-                    
-                    if (killedName != null && !killedName.isEmpty()) {
-                        sayEZ(killedName);
-                        ezTimer.reset();
-                    }
+                }
+                
+                if (killedName == null && message.contains("BedWars") && message.contains("выпал из мира") && message.contains("боролся с") && message.contains(myName)) {
+                    try {
+                        String afterPrefix = message.substring(message.indexOf("»") + 2);
+                        int startIndex = afterPrefix.indexOf(" выпал из мира");
+                        if (startIndex > 0) {
+                            killedName = afterPrefix.substring(0, startIndex).trim();
+                        }
+                    } catch (Exception ignored) {}
+                }
+                
+                if (killedName != null && !killedName.isEmpty()) {
+
+                    if (killedName.equalsIgnoreCase(myName)) return;
+                    if (Managers.FRIEND.isFriend(killedName)) return;
+                    sayEZ(killedName);
+                    ezTimer.reset();
                 }
                 return;
             }
             
-            // Режим MineGame
             if (server.getValue() == ServerMode.MineGame) {
-                // ⚔ Игрок kljdknkjlnea был убит игроком howtoshine
-                if (message.contains("⚔") && message.contains("был убит игроком") && message.contains(mc.player.getName().getString())) {
+                String myName = mc.player.getName().getString();
+                
+                if (message.contains("⚔") && message.contains("был убит игроком") && message.contains(myName)) {
                     try {
-                        // Ищем после "⚔ Игрок " и до " был убит"
                         int startIndex = message.indexOf("⚔ Игрок ") + 9;
                         int endIndex = message.indexOf(" был убит игроком");
                         if (startIndex > 8 && endIndex > startIndex) {
@@ -178,6 +191,8 @@ public final class AutoEZ extends Module {
                     } catch (Exception ignored) {}
                     
                     if (killedName != null && !killedName.isEmpty()) {
+                        if (killedName.equalsIgnoreCase(myName)) return;
+                        if (Managers.FRIEND.isFriend(killedName)) return;
                         sayEZ(killedName);
                         ezTimer.reset();
                     }
@@ -192,13 +207,17 @@ public final class AutoEZ extends Module {
         if (server.getValue() != ServerMode.Universal) return;
         if (!ezTimer.passedMs((long) (delay.getValue() * 1000))) return;
         
+        String killedName = e.getPlayer().getName().getString();
+        if (killedName.equalsIgnoreCase(mc.player.getName().getString())) return;
+        if (Managers.FRIEND.isFriend(killedName)) return;
+        
         if (Aura.target != null && Aura.target == e.getPlayer()) {
-            sayEZ(e.getPlayer().getName().getString());
+            sayEZ(killedName);
             ezTimer.reset();
             return;
         }
         if (AutoCrystal.target != null && AutoCrystal.target == e.getPlayer()) {
-            sayEZ(e.getPlayer().getName().getString());
+            sayEZ(killedName);
             ezTimer.reset();
         }
     }
