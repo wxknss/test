@@ -4,6 +4,7 @@ import meteordevelopment.orbit.EventHandler;
 import net.minecraft.item.Items;
 import net.minecraft.network.packet.c2s.play.ChatMessageC2SPacket;
 import thunder.hack.core.Managers;
+import thunder.hack.core.manager.client.ModuleManager;
 import thunder.hack.events.impl.PacketEvent;
 import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
@@ -28,6 +29,10 @@ public class MessageAppend extends Module {
     public void onPacketSend(PacketEvent.Send e) {
         if (fullNullCheck()) return;
         if (!(e.getPacket() instanceof ChatMessageC2SPacket pac)) return;
+
+        if (ModuleManager.autoEZ.isEnabled()) {
+            return;
+        }
 
         if (Objects.equals(pac.chatMessage(), skip)) return;
 
