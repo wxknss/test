@@ -1,7 +1,7 @@
 package thunder.hack.features.modules.player;
 
 import net.minecraft.client.gui.screen.ChatScreen;
-import net.minecraft.client.gui.screen.ingame.HandledScreen;
+import net.minecraft.client.gui.screen.ingame.InventoryScreen;
 import net.minecraft.component.type.ItemEnchantmentsComponent;
 import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.enchantment.Enchantments;
@@ -10,7 +10,7 @@ import net.minecraft.item.ArmorItem;
 import net.minecraft.item.ElytraItem;
 import net.minecraft.item.ItemStack;
 import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.screen.PlayerScreenHandler;
+import thunder.hack.core.manager.client.ModuleManager;
 import thunder.hack.gui.clickui.ClickGUI;
 import thunder.hack.gui.hud.HudEditorGui;
 import thunder.hack.features.modules.Module;
@@ -49,7 +49,7 @@ public class AutoArmor extends Module {
 
     @Override
     public void onUpdate() {
-        if (mc.currentScreen != null && !(mc.currentScreen instanceof ChatScreen) && !(mc.currentScreen instanceof ClickGUI) && !(mc.currentScreen instanceof HudEditorGui) && !(mc.currentScreen instanceof PlayerScreenHandler))
+        if (mc.currentScreen != null && !(mc.currentScreen instanceof ChatScreen) && !(mc.currentScreen instanceof ClickGUI) && !(mc.currentScreen instanceof HudEditorGui) && !(mc.currentScreen instanceof InventoryScreen))
             return;
 
         if (mc.currentScreen != null && pauseInventory.getValue() && !(mc.currentScreen instanceof ChatScreen) && !(mc.currentScreen instanceof ClickGUI) && !(mc.currentScreen instanceof HudEditorGui))
@@ -107,7 +107,7 @@ public class AutoArmor extends Module {
         if (is.getItem() instanceof ArmorItem || is.getItem() instanceof ElytraItem) {
             int prot = 0;
 
-            EquipmentSlot slot = is.getItem() instanceof ArmorItem ai ? ai.getSlotType() : EquipmentSlot.BODY;
+            EquipmentSlot slot = is.getItem() instanceof ArmorItem ai ? ai.getSlotType() : EquipmentSlot.CHEST;
 
             if (is.getItem() instanceof ElytraItem) {
                 if (!ElytraItem.isUsable(is))
