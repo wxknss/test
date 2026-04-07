@@ -3,6 +3,7 @@ package thunder.hack.features.modules.combat;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.decoration.ArmorStandEntity;
 import net.minecraft.entity.mob.HostileEntity;
 import net.minecraft.entity.mob.MobEntity;
@@ -10,10 +11,13 @@ import net.minecraft.entity.passive.AnimalEntity;
 import net.minecraft.entity.passive.VillagerEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
+import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
+import thunder.hack.ThunderHack;
 import thunder.hack.core.Managers;
 import thunder.hack.core.manager.client.ModuleManager;
 import thunder.hack.events.impl.PlayerUpdateEvent;
+import thunder.hack.injection.accesors.ILivingEntity;
 import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
 import thunder.hack.utility.Timer;
@@ -29,10 +33,11 @@ public class TPAura extends Module {
 
     private final Setting<Float> range = new Setting<>("Range", 50f, 5f, 150f);
     private final Setting<Float> attackRange = new Setting<>("AttackRange", 3.5f, 1f, 6f);
-    private final Setting<Integer> cps = new Setting<>("CPS", 10, 1, 20);
+    private final Setting<Float> attackCooldown = new Setting<>("AttackCooldown", 0.9f, 0.5f, 1f);
+    private final Setting<Float> attackBaseTime = new Setting<>("AttackBaseTime", 0.5f, 0f, 2f);
     private final Setting<Boolean> rotate = new Setting<>("Rotate", true);
     private final Setting<Boolean> teleportBack = new Setting<>("TeleportBack", true);
-    private final Setting<Boolean> vanillaDisabler = new Setting<>("VanillaDisabler", true);
+    private final Setting<Boolean> vanillaDisabler = new Setting<>("VanillaDisabler", false);
     
     private final Setting<Boolean> players = new Setting<>("Players", true);
     private final Setting<Boolean> mobs = new Setting<>("Mobs", false);
@@ -50,7 +55,6 @@ public class TPAura extends Module {
     private final Setting<Boolean> adaptToFlight = new Setting<>("AdaptToFlight", true);
     private final Setting<Float> flightMultiplier = new Setting<>("FlightMultiplier", 5.0f, 1.0f, 15.0f, v -> adaptToFlight.getValue());
 
-    private final Timer timer = new Timer();
     private Entity target;
     private Vec3d originalPos;
     private int hitTicks = 0;
@@ -76,18 +80,18 @@ public class TPAura extends Module {
             return;
         }
 
+        if (getAttackCooldown() < attackCooldown.getValue()) return;
+
         updateTarget();
 
         if (target == null) return;
-
-        if (!timer.passedMs(1000 / cps.getValue())) return;
 
         originalPos = mc.player.getPos();
         Vec3d teleportPos = getTeleportPosition(target, getDynamicAttackRange());
 
         if (teleportPos == null) return;
 
-        if (vanillaDisabler.getValue()) {
+        if (vanillaDisabler.getValue() && isEnabled()) {
             for (int i = 0; i < 3; i++) {
                 sendPacket(new PlayerMoveC2SPacket.OnGroundOnly(true));
             }
@@ -101,7 +105,6 @@ public class TPAura extends Module {
         }
         
         hitTicks = 11;
-        timer.reset();
     }
 
     private void updateTarget() {
@@ -221,6 +224,14 @@ public class TPAura extends Module {
         double pitch = -Math.toDegrees(Math.atan2(diffY, Math.hypot(diffX, diffZ)));
 
         return new float[]{(float) yaw, (float) pitch};
+    }
+
+    public float getAttackCooldownProgressPerTick() {
+        return (float) (1.0 / mc.player.getAttributeValue(EntityAttributes.GENERIC_ATTACK_SPEED) * (20.0 * ThunderHack.TICK_TIMER));
+    }
+
+    public float getAttackCooldown() {
+        return MathHelper.clamp(((float) ((ILivingEntity) mc.player).getLastAttackedTicks() + attackBaseTime.getValue()) / getAttackCooldownProgressPerTick(), 0.0F, 1.0F);
     }
     
     @Override
