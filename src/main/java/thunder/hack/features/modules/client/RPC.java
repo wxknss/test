@@ -22,16 +22,17 @@ public final class RPC extends Module {
     public static Setting<Mode> mode = new Setting<>("Picture", Mode.Recode);
     public static Setting<Boolean> showIP = new Setting<>("ShowIP", true);
     public static Setting<sMode> smode = new Setting<>("StateMode", sMode.Stats);
-    public static Setting<String> state = new Setting<>("State", "Beta? Recode? NextGen?");
+    public static Setting<String> state = new Setting<>("State", "antifunnygame client by krwxnw");
     public static Setting<Boolean> nickname = new Setting<>("Nickname", true);
+    public static Setting<Boolean> clearMode = new Setting<>("ClearMode", false);
     public static DiscordRichPresence presence = new DiscordRichPresence();
     public static boolean started;
     static String String1 = "none";
     private final Timer timer_delay = new Timer();
     private static Thread thread;
     String slov;
-    String[] rpc_perebor_en = {"Спит", "Ворую у VeivVovi пазики", "Пишу 101 способ как в ссать в трусы", "НОУ УРУРУ", "Ты любопытный(ая) дядя/тетя", "София чудо"};
-    String[] rpc_perebor_ru = {"Спит", "Ворую у VeivVovi пазики", "Пишу 101 способ как в ссать в трусы", "НОУ УРУРУ", "Ты любопытный(ая) дядя/тетя", "София чудо"};
+    String[] rpc_perebor_en = {"Спит", "Ворую у VeivVovi пазики", "Пишу 101 способ как в ссать в трусы", "Ты любопытный(ая) дядя/тетя", "София чудо"};
+    String[] rpc_perebor_ru = {"Спит", "Ворую у VeivVovi пазики", "Пишу 101 способ как в ссать в трусы", "Ты любопытный(ая) дядя/тетя", "София чудо"};
     int randomInt;
 
     public RPC() {
@@ -83,33 +84,40 @@ public final class RPC extends Module {
         if (!started) {
             started = true;
             DiscordEventHandlers handlers = new DiscordEventHandlers();
-            rpc.Discord_Initialize("1093053626198523935", handlers, true, "");
+            rpc.Discord_Initialize("1491483123274481674", handlers, true, "");
             presence.startTimestamp = (System.currentTimeMillis() / 1000L);
-            presence.largeImageText = "v" + ThunderHack.VERSION + " [" + ThunderHack.GITHUB_HASH + "]";
+            presence.largeImageText = "кошмар дженро by krwxnw";
             rpc.Discord_UpdatePresence(presence);
 
             thread = new Thread(() -> {
                 while (!Thread.currentThread().isInterrupted()) {
                     rpc.Discord_RunCallbacks();
-                    presence.details = getDetails();
-
-                    switch (smode.getValue()) {
-                        case Stats ->
-                                presence.state = "Hacks: " + Managers.MODULE.getEnabledModules().size() + " / " + Managers.MODULE.modules.size();
-                        case Custom -> presence.state = state.getValue();
-                        case Version -> presence.state = "v" + ThunderHack.VERSION +" for mc 1.21";
-                    }
-
-                    if (nickname.getValue()) {
-                        presence.smallImageText = "logged as - " + mc.getSession().getUsername();
-                        presence.smallImageKey = "https://minotar.net/helm/" + mc.getSession().getUsername() + "/100.png";
-                    } else {
+                    
+                    if (clearMode.getValue()) {
+                        presence.details = "";
+                        presence.state = "";
                         presence.smallImageText = "";
-                        presence.smallImageKey = "";
+                    } else {
+                        presence.details = getDetails();
+
+                        switch (smode.getValue()) {
+                            case Stats ->
+                                    presence.state = "Hacks: " + Managers.MODULE.getEnabledModules().size() + " / " + Managers.MODULE.modules.size();
+                            case Custom -> presence.state = state.getValue();
+                            case Version -> presence.state = "кошмар дженро by krwxnw";
+                        }
+
+                        if (nickname.getValue()) {
+                            presence.smallImageText = "logged as - " + mc.getSession().getUsername();
+                            presence.smallImageKey = "https://minotar.net/helm/" + mc.getSession().getUsername() + "/100.png";
+                        } else {
+                            presence.smallImageText = "";
+                            presence.smallImageKey = "";
+                        }
                     }
 
-                    presence.button_label_1 = "Download";
-                    presence.button_url_1 = "https://github.com/Pan4ur/ThunderHack-Recode/";
+                    presence.button_label_1 = "";
+                    presence.button_url_1 = "";
 
                     switch (mode.getValue()) {
                         case Recode -> presence.largeImageKey = "https://i.imgur.com/yY0z2Uq.gif";
@@ -123,6 +131,7 @@ public final class RPC extends Module {
                             }
                         }
                     }
+                    
                     rpc.Discord_UpdatePresence(presence);
                     try {
                         Thread.sleep(2000L);
@@ -135,6 +144,8 @@ public final class RPC extends Module {
     }
 
     private String getDetails() {
+        if (clearMode.getValue()) return "";
+        
         String result = "";
 
         if (mc.currentScreen instanceof MultiplayerScreen || mc.currentScreen instanceof AddServerScreen || mc.currentScreen instanceof TitleScreen) {
