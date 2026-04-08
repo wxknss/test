@@ -1,9 +1,9 @@
 package thunder.hack.features.modules.player;
 
 import net.minecraft.block.AirBlock;
+import net.minecraft.block.Block;
 import net.minecraft.block.EnderChestBlock;
 import net.minecraft.block.LeavesBlock;
-import net.minecraft.block.WoolBlock;
 import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.enchantment.Enchantments;
 import net.minecraft.item.ItemStack;
@@ -63,6 +63,8 @@ public class AutoTool extends Module {
     public static int getTool(final BlockPos pos) {
         int index = -1;
         float CurrentFastest = 1.0f;
+        Block block = mc.world.getBlockState(pos).getBlock();
+        
         for (int i = 0; i < 9; ++i) {
             final ItemStack stack = mc.player.getInventory().getStack(i);
             if (stack != ItemStack.EMPTY) {
@@ -72,12 +74,15 @@ public class AutoTool extends Module {
                 final float digSpeed = EnchantmentHelper.getLevel(mc.world.getRegistryManager().get(Enchantments.EFFICIENCY.getRegistryRef()).getEntry(Enchantments.EFFICIENCY).get(), stack);
                 float destroySpeed = stack.getMiningSpeedMultiplier(mc.world.getBlockState(pos));
                 
-                if (stack.getItem() instanceof ShearsItem && (mc.world.getBlockState(pos).getBlock() instanceof WoolBlock || mc.world.getBlockState(pos).getBlock() instanceof LeavesBlock)) {
+                boolean isWool = block.toString().toLowerCase().contains("wool");
+                boolean isLeaves = block instanceof LeavesBlock;
+                
+                if (stack.getItem() instanceof ShearsItem && (isWool || isLeaves)) {
                     destroySpeed = 15f;
                 }
 
-                if (mc.world.getBlockState(pos).getBlock() instanceof AirBlock) return -1;
-                if (mc.world.getBlockState(pos).getBlock() instanceof EnderChestBlock && echestSilk.getValue()) {
+                if (block instanceof AirBlock) return -1;
+                if (block instanceof EnderChestBlock && echestSilk.getValue()) {
                     if (EnchantmentHelper.getLevel(mc.world.getRegistryManager().get(Enchantments.SILK_TOUCH.getRegistryRef()).getEntry(Enchantments.SILK_TOUCH).get(), stack) > 0 && digSpeed + destroySpeed > CurrentFastest) {
                         CurrentFastest = digSpeed + destroySpeed;
                         index = i;
