@@ -3,6 +3,7 @@ package thunder.hack.features.modules.combat;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.decoration.ArmorStandEntity;
 import net.minecraft.entity.mob.HostileEntity;
 import net.minecraft.entity.mob.MobEntity;
@@ -11,7 +12,6 @@ import net.minecraft.entity.passive.VillagerEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
 import net.minecraft.util.Hand;
-import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import thunder.hack.ThunderHack;
@@ -21,7 +21,6 @@ import thunder.hack.events.impl.PlayerUpdateEvent;
 import thunder.hack.injection.accesors.ILivingEntity;
 import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
-import thunder.hack.utility.Timer;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -220,10 +219,10 @@ public class TPAura extends Module {
 
         mc.interactionManager.attackEntity(mc.player, target);
         
-    switch (attackHand.getValue()) {
-        case OffHand -> mc.player.swingHand(Hand.OFF_HAND);
-        case MainHand -> mc.player.swingHand(Hand.MAIN_HAND);
-        case None -> {}
+        switch (attackHand.getValue()) {
+            case OffHand -> mc.player.swingHand(Hand.OFF_HAND);
+            case MainHand -> mc.player.swingHand(Hand.MAIN_HAND);
+            case None -> {}
         }
     }
 
