@@ -2,9 +2,12 @@ package thunder.hack.features.modules.player;
 
 import net.minecraft.block.AirBlock;
 import net.minecraft.block.EnderChestBlock;
+import net.minecraft.block.LeavesBlock;
+import net.minecraft.block.WoolBlock;
 import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.enchantment.Enchantments;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.ShearsItem;
 import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.BlockPos;
@@ -67,7 +70,11 @@ public class AutoTool extends Module {
                     continue;
 
                 final float digSpeed = EnchantmentHelper.getLevel(mc.world.getRegistryManager().get(Enchantments.EFFICIENCY.getRegistryRef()).getEntry(Enchantments.EFFICIENCY).get(), stack);
-                final float destroySpeed = stack.getMiningSpeedMultiplier(mc.world.getBlockState(pos));
+                float destroySpeed = stack.getMiningSpeedMultiplier(mc.world.getBlockState(pos));
+                
+                if (stack.getItem() instanceof ShearsItem && (mc.world.getBlockState(pos).getBlock() instanceof WoolBlock || mc.world.getBlockState(pos).getBlock() instanceof LeavesBlock)) {
+                    destroySpeed = 15f;
+                }
 
                 if (mc.world.getBlockState(pos).getBlock() instanceof AirBlock) return -1;
                 if (mc.world.getBlockState(pos).getBlock() instanceof EnderChestBlock && echestSilk.getValue()) {
