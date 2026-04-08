@@ -17,6 +17,8 @@ public class FastUse extends Module {
     public Setting<Boolean> crystals = new Setting<>("Crystals", false);
     public Setting<Boolean> xp = new Setting<>("XP", false);
     public Setting<Boolean> all = new Setting<>("All", true);
+    public Setting<Boolean> ignoreBeds = new Setting<>("IgnoreBeds", false);
+    public Setting<Boolean> ignoreEmptyBuckets = new Setting<>("IgnoreBuckets", false);
 
     @Override
     public void onUpdate() {
@@ -25,6 +27,9 @@ public class FastUse extends Module {
     }
 
     public boolean check(Item item) {
+        if (ignoreBeds.getValue() && item == Items.RED_BED) return false;
+        if (ignoreEmptyBuckets.getValue() && item == Items.BUCKET) return false;
+        
         return (item instanceof BlockItem && blocks.getValue())
                 || (item == Items.END_CRYSTAL && crystals.getValue())
                 || (item == Items.EXPERIENCE_BOTTLE && xp.getValue())
