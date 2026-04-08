@@ -3,7 +3,6 @@ package thunder.hack.features.modules.combat;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.decoration.ArmorStandEntity;
 import net.minecraft.entity.mob.HostileEntity;
 import net.minecraft.entity.mob.MobEntity;
@@ -11,6 +10,8 @@ import net.minecraft.entity.passive.AnimalEntity;
 import net.minecraft.entity.passive.VillagerEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
+import net.minecraft.util.Hand;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import thunder.hack.ThunderHack;
@@ -38,6 +39,9 @@ public class TPAura extends Module {
     private final Setting<Boolean> rotate = new Setting<>("Rotate", true);
     private final Setting<Boolean> teleportBack = new Setting<>("TeleportBack", true);
     private final Setting<Boolean> vanillaDisabler = new Setting<>("VanillaDisabler", false);
+    private final Setting<Integer> disablerPackets = new Setting<>("DisablerPackets", 3, 3, 5, v -> vanillaDisabler.getValue());
+    private final Setting<Boolean> checkTeleportSpot = new Setting<>("CheckTeleportSpot", true);
+    private final Setting<AttackHand> attackHand = new Setting<>("AttackHand", AttackHand.MainHand);
     
     private final Setting<Boolean> players = new Setting<>("Players", true);
     private final Setting<Boolean> mobs = new Setting<>("Mobs", false);
@@ -92,7 +96,7 @@ public class TPAura extends Module {
         if (teleportPos == null) return;
 
         if (vanillaDisabler.getValue() && isEnabled()) {
-            for (int i = 0; i < 3; i++) {
+            for (int i = 0; i < disablerPackets.getValue(); i++) {
                 sendPacket(new PlayerMoveC2SPacket.OnGroundOnly(true));
             }
         }
@@ -189,7 +193,12 @@ public class TPAura extends Module {
                 target.getY(),
                 target.getZ() + directionZ * r
             );
-            if (isPositionSafe(pos)) {
+            
+            if (checkTeleportSpot.getValue()) {
+                if (isPositionSafe(pos)) {
+                    return pos;
+                }
+            } else {
                 return pos;
             }
         }
@@ -210,7 +219,12 @@ public class TPAura extends Module {
         }
 
         mc.interactionManager.attackEntity(mc.player, target);
-        mc.player.swingHand(net.minecraft.util.Hand.MAIN_HAND);
+        
+    switch (attackHand.getValue()) {
+        case OffHand -> mc.player.swingHand(Hand.OFF_HAND);
+        case MainHand -> mc.player.swingHand(Hand.MAIN_HAND);
+        case None -> {}
+        }
     }
 
     private float[] getRotations(Entity target) {
@@ -240,5 +254,11 @@ public class TPAura extends Module {
             return player.getName().getString();
         }
         return null;
+    }
+
+    public enum AttackHand {
+        MainHand,
+        OffHand,
+        None
     }
 }
