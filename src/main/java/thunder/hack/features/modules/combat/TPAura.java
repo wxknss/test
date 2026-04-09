@@ -190,22 +190,54 @@ public class TPAura extends Module {
         double bestDistance = -1;
         
         for (double r = 1.5; r <= range; r += 0.5) {
-            Vec3d pos = new Vec3d(
+            Vec3d basePos = new Vec3d(
                 target.getX() + directionX * r,
                 target.getY(),
                 target.getZ() + directionZ * r
             );
             
-            if (checkTeleportSpot.getValue()) {
-                if (isPositionSafe(pos)) {
-                    double dist = Math.abs(mc.player.getX() - pos.x) + Math.abs(mc.player.getZ() - pos.z);
-                    if (bestPos == null || dist < bestDistance) {
-                        bestPos = pos;
-                        bestDistance = dist;
+            for (double yOffset = 0; yOffset <= 2.0; yOffset += 1.0) {
+                Vec3d pos = basePos.add(0, yOffset, 0);
+                
+                if (checkTeleportSpot.getValue()) {
+                    if (isPositionSafe(pos) && isPositionSafe(pos.add(0, 1, 0))) {
+                        double dist = Math.abs(mc.player.getX() - pos.x) + Math.abs(mc.player.getZ() - pos.z);
+                        if (bestPos == null || dist < bestDistance) {
+                            bestPos = pos;
+                            bestDistance = dist;
+                        }
+                    }
+                } else {
+                    return pos;
+                }
+            }
+            
+            for (double angleOffset = -90; angleOffset <= 90; angleOffset += 45) {
+                double angledYaw = yawRad + Math.toRadians(angleOffset);
+                double dirX = -Math.sin(angledYaw);
+                double dirZ = Math.cos(angledYaw);
+                
+                Vec3d sidePos = new Vec3d(
+                    target.getX() + dirX * r,
+                    target.getY(),
+                    target.getZ() + dirZ * r
+                );
+                
+                for (double yOffset = 0; yOffset <= 1.0; yOffset += 1.0) {
+                    Vec3d pos = sidePos.add(0, yOffset, 0);
+                    
+                    if (checkTeleportSpot.getValue()) {
+                        if (isPositionSafe(pos) && isPositionSafe(pos.add(0, 1, 0))) {
+                            double dist = Math.abs(mc.player.getX() - pos.x) + Math.abs(mc.player.getZ() - pos.z);
+                            if (bestPos == null || dist < bestDistance) {
+                                bestPos = pos;
+                                bestDistance = dist;
+                            }
+                        }
+                    } else {
+                        return pos;
                     }
                 }
-            } else {
-                return pos;
             }
         }
         return bestPos;
