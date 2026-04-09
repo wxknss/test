@@ -3,7 +3,6 @@ package thunder.hack.features.modules.combat;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.decoration.ArmorStandEntity;
 import net.minecraft.entity.mob.HostileEntity;
 import net.minecraft.entity.mob.MobEntity;
@@ -12,6 +11,7 @@ import net.minecraft.entity.passive.VillagerEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
 import net.minecraft.util.Hand;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import thunder.hack.ThunderHack;
@@ -54,9 +54,9 @@ public class TPAura extends Module {
     private final Setting<Boolean> ignoreNaked = new Setting<>("IgnoreNaked", false);
     
     private final Setting<Boolean> adaptToSpeed = new Setting<>("AdaptToSpeed", true);
-    private final Setting<Float> speedMultiplier = new Setting<>("SpeedMultiplier", 3.0f, 1.0f, 10.0f, v -> adaptToSpeed.getValue());
+    private final Setting<Float> speedMultiplier = new Setting<>("SpeedMultiplier", 3f, 1f, 10f, v -> adaptToSpeed.getValue());
     private final Setting<Boolean> adaptToFlight = new Setting<>("AdaptToFlight", true);
-    private final Setting<Float> flightMultiplier = new Setting<>("FlightMultiplier", 5.0f, 1.0f, 15.0f, v -> adaptToFlight.getValue());
+    private final Setting<Float> flightMultiplier = new Setting<>("FlightMultiplier", 5f, 1f, 15f, v -> adaptToFlight.getValue());
 
     private Entity target;
     private Vec3d originalPos;
@@ -186,6 +186,9 @@ public class TPAura extends Module {
         double directionX = -Math.sin(yawRad);
         double directionZ = Math.cos(yawRad);
 
+        Vec3d bestPos = null;
+        double bestDistance = -1;
+        
         for (double r = 1.5; r <= range; r += 0.5) {
             Vec3d pos = new Vec3d(
                 target.getX() + directionX * r,
@@ -195,13 +198,17 @@ public class TPAura extends Module {
             
             if (checkTeleportSpot.getValue()) {
                 if (isPositionSafe(pos)) {
-                    return pos;
+                    double dist = Math.abs(mc.player.getX() - pos.x) + Math.abs(mc.player.getZ() - pos.z);
+                    if (bestPos == null || dist < bestDistance) {
+                        bestPos = pos;
+                        bestDistance = dist;
+                    }
                 }
             } else {
                 return pos;
             }
         }
-        return null;
+        return bestPos;
     }
 
     private boolean isPositionSafe(Vec3d pos) {
