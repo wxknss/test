@@ -23,7 +23,6 @@ import thunder.hack.utility.Timer;
 
 import java.text.SimpleDateFormat;
 import java.util.*;
-import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -49,7 +48,7 @@ public class ChatUtils extends Module {
     private final Setting<Boolean> wavy = new Setting<>("wAvY", false);
     private final Setting<Boolean> translit = new Setting<>("Translit", false);
     private final Setting<Boolean> antiCoordLeak = new Setting<>("AntiCoordLeak", false);
-    private final Setting<Boolean> antiClear = new Setting<>("AntiChatClear", false);
+    private final Setting<Boolean> antiClear = new Setting<>("AntiClear", false);
 
     private final Timer timer = new Timer();
     private final Timer antiSpam = new Timer();
@@ -151,6 +150,11 @@ public class ChatUtils extends Module {
 
     public ChatUtils() {
         super("ChatUtils", Category.MISC);
+    }
+
+    public static boolean isAntiClearEnabled() {
+        if (ModuleManager.chatUtils == null) return false;
+        return ModuleManager.chatUtils.isEnabled() && ModuleManager.chatUtils.antiClear.getValue();
     }
 
     public enum CopySymbol {
@@ -327,10 +331,6 @@ public class ChatUtils extends Module {
         if (event.getPacket() instanceof GameMessageS2CPacket pac) {
             IGameMessageS2CPacket pac2 = event.getPacket();
             Text messageContent = pac.content();
-            
-            if (antiClear.getValue()) {
-                messageContent = applyAntiChatClear(messageContent);
-            }
             
             if (time.getValue()) {
                 String timeStr = new SimpleDateFormat("HH:mm:ss").format(Calendar.getInstance().getTime());
@@ -521,24 +521,6 @@ public class ChatUtils extends Module {
         }
 
         return result.toString();
-    }
-
-    private Text applyAntiChatClear(Text message) {
-        String messageString = message.getString();
-        Pattern antiClearRegex = Pattern.compile("\\n(\\n|\\s)+\\n");
-        Matcher matcher = antiClearRegex.matcher(messageString);
-        
-        if (matcher.find()) {
-            MutableText newMessage = Text.empty();
-            message.visit((style, string) -> {
-                Matcher m = antiClearRegex.matcher(string);
-                String newString = m.find() ? m.replaceAll("\n\n") : string;
-                newMessage.append(Text.literal(newString).setStyle(style));
-                return Optional.empty();
-            }, Style.EMPTY);
-            return newMessage;
-        }
-        return message;
     }
 
     private enum Welcomer {
