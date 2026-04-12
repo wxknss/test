@@ -5,13 +5,14 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
+import thunder.hack.core.manager.client.ModuleManager;
 import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
 import thunder.hack.utility.Timer;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class ItemNBTChecker extends Module {
     public ItemNBTChecker() {
@@ -32,14 +33,22 @@ public class ItemNBTChecker extends Module {
         if (fullNullCheck()) return;
         if (!timer.passedMs(scanDelay.getValue() * 1000L)) return;
 
-        List<ItemEntity> items = mc.world.getEntities()
-                .stream()
-                .filter(e -> e instanceof ItemEntity)
-                .map(e -> (ItemEntity) e)
-                .filter(e -> mc.player.distanceTo(e) <= radius.getValue())
-                .sorted(Comparator.comparingDouble(e -> mc.player.distanceTo(e)))
-                .limit(5)
-                .collect(Collectors.toList());
+        List<ItemEntity> items = new ArrayList<>();
+        
+        for (net.minecraft.entity.Entity entity : mc.world.getEntities()) {
+            if (entity instanceof ItemEntity) {
+                ItemEntity item = (ItemEntity) entity;
+                if (mc.player.distanceTo(item) <= radius.getValue()) {
+                    items.add(item);
+                }
+            }
+        }
+        
+        items.sort(Comparator.comparingDouble(e -> mc.player.distanceTo(e)));
+        
+        if (items.size() > 5) {
+            items = items.subList(0, 5);
+        }
 
         for (ItemEntity item : items) {
             ItemStack stack = item.getStack();
@@ -59,11 +68,6 @@ public class ItemNBTChecker extends Module {
                         }
                         
                         lastNotifiedItem = item;
-                    }
-                    
-                    if (highlightInWorld.getValue()) {
-                        // Добавляем подсветку через Outline (если есть Render3DEngine)
-                        // Или просто спамим в чат, зависит от твоего рендера
                     }
                     
                     break;
