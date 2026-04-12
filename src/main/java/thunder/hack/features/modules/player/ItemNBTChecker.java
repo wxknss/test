@@ -52,8 +52,8 @@ public class ItemNBTChecker extends Module {
 
         for (ItemEntity item : items) {
             ItemStack stack = item.getStack();
-            NbtCompound nbt = stack.getNbt();
-
+            NbtCompound nbt = stack.getNbtComponent();
+            
             if (nbt != null && !nbt.isEmpty()) {
                 String nbtString = nbt.asString();
                 
