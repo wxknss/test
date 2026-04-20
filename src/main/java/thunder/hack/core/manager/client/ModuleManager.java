@@ -188,6 +188,7 @@ public class ModuleManager implements IManager {
     public static AutoBuy autoBuy = new AutoBuy();
     public static AntiFireball antiFireball = new AntiFireball();
     public static ItemDropper itemDropper = new ItemDropper();
+    public static MaceKill maceKill = new MaceKill();
     public static ArmorHud armorHud = new ArmorHud();
     public static AirPlace airPlace = new AirPlace();
     public static SelfTrap selfTrap = new SelfTrap();
