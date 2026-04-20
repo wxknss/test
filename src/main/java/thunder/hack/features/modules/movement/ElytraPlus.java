@@ -5,9 +5,7 @@ import net.minecraft.item.ElytraItem;
 import net.minecraft.item.Items;
 import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
 import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
 import net.minecraft.screen.slot.SlotActionType;
-import net.minecraft.util.Hand;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import thunder.hack.ThunderHack;
@@ -21,6 +19,7 @@ import thunder.hack.utility.player.MovementUtility;
 
 public class ElytraPlus extends Module {
     public enum Mode { Boost, SunriseNew, Packet }
+    
     private final Setting<Mode> mode = new Setting<>("Mode", Mode.Boost);
 
     // Boost settings
@@ -32,22 +31,26 @@ public class ElytraPlus extends Module {
     private final Setting<Boolean> instantFly = new Setting<>("InstantFly", true, v -> mode.is(Mode.Boost));
     private final Setting<Float> redeployDelay = new Setting<>("RedeployDelay", 1.2f, 0.5f, 3f, v -> mode.is(Mode.Boost) && instantFly.getValue());
     private final Setting<Boolean> grimBypass = new Setting<>("GrimBypass", true, v -> mode.is(Mode.Boost));
+    private final Setting<Boolean> twoBee = new Setting<>("2b2t", false, v -> mode.is(Mode.Boost));
 
     // SunriseNew settings
     private final Setting<Float> xzSpeed = new Setting<>("XZSpeed", 1.8f, 0.5f, 5f, v -> mode.is(Mode.SunriseNew));
     private final Setting<Float> ySpeed = new Setting<>("YSpeed", 0.5f, 0.1f, 2f, v -> mode.is(Mode.SunriseNew));
     private final Setting<Integer> disablerDelay = new Setting<>("DisablerDelay", 2, 0, 10, v -> mode.is(Mode.SunriseNew));
 
-    // Common
+    // Packet settings
+    private final Setting<Float> packetSpeed = new Setting<>("PacketSpeed", 1.5f, 0.5f, 5f, v -> mode.is(Mode.Packet));
+    private final Setting<Boolean> infDurability = new Setting<>("InfDurability", true, v -> mode.is(Mode.Packet));
+
     private final Setting<Boolean> autoToggle = new Setting<>("AutoToggle", false);
 
     private final Timer startTimer = new Timer();
     private final Timer redeployTimer = new Timer();
-    private final Timer glideTimer = new Timer();
     private float acceleration = 0;
     private int disablerTicks = 0;
     private boolean hasTouchedGround = true;
     private float height;
+    private boolean started = false;
 
     public ElytraPlus() {
         super("Elytra+", Category.MOVEMENT);
@@ -57,16 +60,20 @@ public class ElytraPlus extends Module {
     public void onEnable() {
         acceleration = 0;
         hasTouchedGround = true;
+        started = false;
         height = (float) mc.player.getY();
         startTimer.reset();
         redeployTimer.reset();
+        
         if (mode.is(Mode.SunriseNew) && InventoryUtility.getElytra() == -1) {
-            disable("No elytra!");
+            disable("No elytra found!");
         }
     }
 
     @EventHandler
     public void onMove(EventMove e) {
+        if (fullNullCheck()) return;
+        
         if (mode.is(Mode.Boost)) doBoost(e);
         else if (mode.is(Mode.SunriseNew)) doSunriseNew(e);
         else if (mode.is(Mode.Packet)) doPacket(e);
@@ -74,20 +81,24 @@ public class ElytraPlus extends Module {
 
     @EventHandler
     public void onSync(EventSync e) {
-        if (mode.is(Mode.Boost) && instantFly.getValue()) {
+        if (fullNullCheck()) return;
+        
+        if (mode.is(Mode.Boost) && instantFly.getValue() && !twoBee.getValue()) {
             if (mc.player.isOnGround()) hasTouchedGround = true;
+            
             if (!mc.player.isFallFlying() && hasTouchedGround && !mc.player.isOnGround() && mc.player.fallDistance > 0.2) {
                 if (startTimer.passedMs((long) (redeployDelay.getValue() * 1000))) {
-                    // Grim bypass: имитация прыжка перед стартом
                     if (grimBypass.getValue()) {
-                        sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_JUMP));
+                        sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_RIDING_JUMP));
                     }
                     sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
                     startTimer.reset();
                     hasTouchedGround = false;
+                    started = true;
                 }
             }
         }
+        
         if (mode.is(Mode.SunriseNew)) {
             if (mc.player.isOnGround()) {
                 mc.player.jump();
@@ -96,6 +107,13 @@ public class ElytraPlus extends Module {
             if (disablerTicks-- <= 0) {
                 matrixDisabler();
                 disablerTicks = disablerDelay.getValue();
+            }
+        }
+        
+        if (mode.is(Mode.Packet)) {
+            if (mc.player.isOnGround() && autoToggle.getValue()) {
+                disable();
+                return;
             }
         }
     }
@@ -116,6 +134,18 @@ public class ElytraPlus extends Module {
             } else {
                 mc.player.setPitch(0.25F);
             }
+        }
+
+        if (twoBee.getValue()) {
+            if (mc.options.jumpKey.isPressed()) {
+                double[] m = MovementUtility.forwardWithoutStrafe(factor.getValue() / 10f);
+                e.setX(e.getX() + m[0]);
+                e.setZ(e.getZ() + m[1]);
+                e.setY(upSpeed.getValue() / 2f);
+            }
+            mc.player.setVelocity(e.getX(), e.getY(), e.getZ());
+            e.cancel();
+            return;
         }
 
         Vec3d look = mc.player.getRotationVec(1f);
@@ -160,6 +190,7 @@ public class ElytraPlus extends Module {
 
     private void doSunriseNew(EventMove e) {
         if (mc.player.getInventory().getStack(38).getItem() != Items.ELYTRA) return;
+        
         if (!mc.player.isFallFlying()) {
             sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
             return;
@@ -180,15 +211,16 @@ public class ElytraPlus extends Module {
 
     private void doPacket(EventMove e) {
         if (mc.player.getInventory().getStack(38).getItem() != Items.ELYTRA) return;
-        if (!mc.player.isFallFlying())
+        
+        if (!mc.player.isFallFlying() || infDurability.getValue())
             sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
 
         mc.player.getAbilities().flying = true;
-        mc.player.getAbilities().setFlySpeed(xzSpeed.getValue() / 15f);
+        mc.player.getAbilities().setFlySpeed(packetSpeed.getValue() / 15f);
         e.cancel();
 
-        if (mc.options.jumpKey.isPressed()) e.setY(ySpeed.getValue());
-        else if (mc.options.sneakKey.isPressed()) e.setY(-ySpeed.getValue());
+        if (mc.options.jumpKey.isPressed()) e.setY(packetSpeed.getValue() / 2f);
+        else if (mc.options.sneakKey.isPressed()) e.setY(-packetSpeed.getValue() / 2f);
         else e.setY(0);
 
         mc.player.setVelocity(e.getX(), e.getY(), e.getZ());
@@ -198,21 +230,27 @@ public class ElytraPlus extends Module {
         int elytra = InventoryUtility.getElytra();
         if (elytra == -1) return;
         elytra = elytra < 9 ? elytra + 36 : elytra;
-        // Быстрая смена брони для сбивания предсказания Grim
-        clickSlot(elytra);
-        clickSlot(6);
-        clickSlot(elytra);
+        clickSlotElytra(elytra);
+        clickSlotElytra(6);
+        clickSlotElytra(elytra);
         sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
     }
 
-    private void clickSlot(int slot) {
+    private void clickSlotElytra(int slot) {
         mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot, 0, SlotActionType.PICKUP, mc.player);
     }
 
     @Override
     public void onDisable() {
         ThunderHack.TICK_TIMER = 1.0f;
-        mc.player.getAbilities().flying = false;
-        mc.player.getAbilities().setFlySpeed(0.05f);
+        if (mc.player != null) {
+            mc.player.getAbilities().flying = false;
+            mc.player.getAbilities().setFlySpeed(0.05f);
+        }
+    }
+    
+    @Override
+    public String getDisplayInfo() {
+        return mode.getValue().name();
     }
 }
