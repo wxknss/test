@@ -12,25 +12,14 @@ import thunder.hack.utility.ThunderUtility;
 
 import static thunder.hack.ThunderHack.EVENT_BUS;
 
-/**
- * Class with all ThunderHack Managers' instances
- *
- * @author 06ED
- * @see IManager - base interface for all managers
- * @see ThunderHack - managers init process
- * @since 1.7
- */
 public class Managers {
-    // Player
     public static final CombatManager COMBAT = new CombatManager();
     public static final FriendManager FRIEND = new FriendManager();
     public static final PlayerManager PLAYER = new PlayerManager();
 
-    // World
-    public static final HoleManager HOLE = new HoleManager(); //todo ???
+    public static final HoleManager HOLE = new HoleManager();
     public static final WayPointManager WAYPOINT = new WayPointManager();
 
-    // Client
     public static final AddonManager ADDON = new AddonManager();
     public static final AsyncManager ASYNC = new AsyncManager();
     public static final ModuleManager MODULE = new ModuleManager();
@@ -57,7 +46,6 @@ public class Managers {
             ThunderUtility.syncContributors();
             ThunderUtility.parseStarGazer();
             ThunderUtility.parseCommits();
-            TELEMETRY.fetchData();
         });
     }
 
@@ -67,6 +55,5 @@ public class Managers {
         EVENT_BUS.subscribe(PLAYER);
         EVENT_BUS.subscribe(COMBAT);
         EVENT_BUS.subscribe(ASYNC);
-        EVENT_BUS.subscribe(TELEMETRY);
     }
 }
