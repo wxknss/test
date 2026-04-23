@@ -3,23 +3,22 @@ package thunder.hack.features.modules.combat;
 import io.netty.buffer.Unpooled;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.decoration.EndCrystalEntity;
 import net.minecraft.network.PacketByteBuf;
-import net.minecraft.network.packet.c2s.play.*;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
 import org.jetbrains.annotations.NotNull;
 import thunder.hack.events.impl.PacketEvent;
 import thunder.hack.injection.accesors.IClientPlayerEntity;
 import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
-import thunder.hack.utility.Timer;
 
 public final class Criticals extends Module {
     public final Setting<Mode> mode = new Setting<>("Mode", Mode.UpdatedNCP);
-    public final Setting<Integer> critDelay = new Setting<>("CritDelay", 0, 0, 1000); // задержка в мс, 0 = без ограничения
+    public final Setting<Integer> hurtTime = new Setting<>("HurtTime", 10, 0, 10);
 
-    private boolean cancelCrit;
-    private final Timer critTimer = new Timer();
+    public static boolean cancelCrit;
 
     public Criticals() {
         super("Criticals", Category.COMBAT);
@@ -34,9 +33,7 @@ public final class Criticals extends Module {
             Entity ent = mc.world.getEntityById(info.entityId);
             if (ent == null || ent instanceof EndCrystalEntity || cancelCrit) return;
 
-            // Ограничение частоты
-            if (!critTimer.passedMs(critDelay.getValue())) return;
-            critTimer.reset();
+            if (ent instanceof LivingEntity lent && lent.hurtTime > hurtTime.getValue()) return;
 
             doCrit();
         }
@@ -45,11 +42,9 @@ public final class Criticals extends Module {
     public void doCrit() {
         if (isDisabled() || mc.player == null || mc.world == null) return;
 
-        // Условия для срабатывания: на земле, в полёте, или Grim/Matrix (донатный флай)
-        if (!(mc.player.isOnGround() || mc.player.getAbilities().flying || mode.is(Mode.Grim) || mode.is(Mode.Vanilla)))
+        if (!(mc.player.isOnGround() || mc.player.getAbilities().flying || mode.is(Mode.Grim)))
             return;
 
-        // Отключаем криты в лаве/воде, чтобы не светиться
         if (mc.player.isInLava() || mc.player.isSubmergedInWater()) return;
 
         switch (mode.getValue()) {
@@ -76,11 +71,6 @@ public final class Criticals extends Module {
                 if (!mc.player.isOnGround())
                     sendCritPacket(-0.000001, true);
             }
-            case Vanilla -> {
-                // Всегда критуем, даже при прыжке вверх
-                // Отправляем микро-снижение, чтобы имитировать падение
-                sendCritPacket(-0.0001, false);
-            }
         }
     }
 
@@ -98,10 +88,18 @@ public final class Criticals extends Module {
         }
     }
 
-    /**
-     * Читает из пакета ID сущности и тип взаимодействия.
-     * Исправляет утечку ByteBuf.
-     */
+    public static Entity getEntity(PlayerInteractEntityC2SPacket packet) {
+        InteractInfo info = readPacket(packet);
+        if (info == null) return null;
+        return mc.world.getEntityById(info.entityId);
+    }
+
+    public static InteractType getInteractType(PlayerInteractEntityC2SPacket packet) {
+        InteractInfo info = readPacket(packet);
+        if (info == null) return null;
+        return info.type;
+    }
+
     private static InteractInfo readPacket(PlayerInteractEntityC2SPacket packet) {
         PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
         try {
@@ -123,15 +121,6 @@ public final class Criticals extends Module {
     }
 
     public enum Mode {
-        Ncp, Strict, OldNCP, UpdatedNCP, Grim, Vanilla
-    }
-
-    // Управление отключением критов извне (для AutoCrystal и т.п.)
-    public void setCancelCrit(boolean cancel) {
-        this.cancelCrit = cancel;
-    }
-
-    public boolean isCancelCrit() {
-        return cancelCrit;
+        Ncp, Strict, OldNCP, UpdatedNCP, Grim
     }
 }
