@@ -46,6 +46,10 @@ public class EbatteSratte extends Module {
                 PlayerEntity entity = (PlayerEntity) event.getEntity();
                 if (entity == null) return;
 
+                String playerName = entity.getName().getString();
+
+                if (playerName.contains("§")) return;
+
                 int n;
 
                 if (mode.getValue() == Messages.Default) n = (int) Math.floor(Math.random() * WORDS.length);
@@ -59,10 +63,9 @@ public class EbatteSratte extends Module {
                 };
 
                 if (chatPrefix.contains("/"))
-                    mc.getNetworkHandler().sendChatCommand("/msg " + entity.getName().getString() + " " + (mode.getValue() == Messages.Default ? WORDS[n] : words.get(n)));
+                    mc.getNetworkHandler().sendChatCommand("/msg " + playerName + " " + (mode.getValue() == Messages.Default ? WORDS[n] : words.get(n)));
                 else
-                    mc.getNetworkHandler().sendChatMessage(chatPrefix + entity.getName().getString() + " " + (mode.getValue() == Messages.Default ? WORDS[n] : words.get(n)));
-
+                    mc.getNetworkHandler().sendChatMessage(chatPrefix + playerName + " " + (mode.getValue() == Messages.Default ? WORDS[n] : words.get(n)));
 
                 timer.reset();
             }
