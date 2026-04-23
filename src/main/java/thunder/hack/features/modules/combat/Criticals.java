@@ -58,7 +58,6 @@ public final class Criticals extends Module {
                 case Grim -> {
                     if (!mc.player.isOnGround())
                         critPacket(-0.000001, true);
-
                 }
             }
         }
