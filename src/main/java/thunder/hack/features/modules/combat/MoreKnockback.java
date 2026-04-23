@@ -26,9 +26,12 @@ public class MoreKnockback extends Module {
     public Setting<Boolean> inMove = new Setting<>("InMove", true);
     public Setting<Integer> hurtTime = new Setting<>("HurtTime", 10, 0, 10);
     public Setting<Integer> chance = new Setting<>("Chance", 100, 0, 100);
+    public Setting<Boolean> keepElytraCrit = new Setting<>("KeepElytraCrit", false);
 
     @EventHandler
     public void onSendPacket(PacketEvent.Send event) {
+        if (keepElytraCrit.getValue() && mc.player.isFallFlying()) return;
+
         if ((!MovementUtility.isMoving() || inMove.getValue())
                 && event.getPacket() instanceof PlayerInteractEntityC2SPacket
                 && getInteractType(event.getPacket()) == Criticals.InteractType.ATTACK
