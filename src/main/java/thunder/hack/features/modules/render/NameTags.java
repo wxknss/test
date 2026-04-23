@@ -73,8 +73,8 @@ public class NameTags extends Module {
         encMap.put(Enchantments.THORNS, "T");
     }
 
-    private final Setting<Boolean> self = new Setting<>("Self", false);
-    private final Setting<Float> scale = new Setting<>("Scale", 1f, 0.1f, 10f);
+    private final Setting<Boolean> self = new Setting<>("Self", true);
+    private final Setting<Float> scale = new Setting<>("Scale", 0.7f, 0.1f, 10f);
     private final Setting<Boolean> resize = new Setting<>("Resize", false);
     private final Setting<Float> height = new Setting<>("Height", 2f, 0.1f, 10f);
     private final Setting<Boolean> gamemode = new Setting<>("Gamemode", false);
@@ -82,25 +82,24 @@ public class NameTags extends Module {
     private final Setting<Boolean> entityOwner = new Setting<>("EntityOwner", false);
     private final Setting<Boolean> ping = new Setting<>("Ping", false);
     private final Setting<Boolean> hp = new Setting<>("HP", true);
-    private final Setting<Boolean> distance = new Setting<>("Distance", true);
-    private final Setting<Boolean> pops = new Setting<>("TotemPops", true);
+    private final Setting<Boolean> distance = new Setting<>("Distance", false);
+    private final Setting<Boolean> pops = new Setting<>("TotemPops", false);
     private final Setting<OutlineColor> outline = new Setting<>("OutlineType", OutlineColor.New);
     private final Setting<OutlineColor> friendOutline = new Setting<>("FriendOutline", OutlineColor.None);
     private final Setting<ColorSetting> outlineColor = new Setting<>("OutlineColor", new ColorSetting(0x80000000));
     private final Setting<ColorSetting> friendOutlineColor = new Setting<>("FriendOutlineColor", new ColorSetting(0x80000000));
-    private final Setting<Boolean> enchantss = new Setting<>("Enchants", true);
+    private final Setting<Boolean> enchantss = new Setting<>("Enchants", false);
     private final Setting<Boolean> onlyHands = new Setting<>("OnlyHands", false, v -> enchantss.getValue());
-    private final Setting<Boolean> funtimeHp = new Setting<>("FunTimeHp", false);
+    private final Setting<Boolean> funtimeHp = new Setting<>("FunTimeHp", true);
     private final Setting<Boolean> ignoreBots = new Setting<>("IgnoreBots", false);
-    private final Setting<Boolean> potions = new Setting<>("Potions", true);
-    private final Setting<Boolean> shulkers = new Setting<>("Shulkers", true);
+    private final Setting<Boolean> potions = new Setting<>("Potions", false);
+    private final Setting<Boolean> shulkers = new Setting<>("Shulkers", false);
     private final Setting<ColorSetting> fillColorA = new Setting<>("Fill", new ColorSetting(0x80000000));
     private final Setting<ColorSetting> fillColorF = new Setting<>("FriendFill", new ColorSetting(0x80000000));
-    private final Setting<Font> font = new Setting<>("FontMode", Font.Fancy);
-    private final Setting<Armor> armorMode = new Setting<>("ArmorMode", Armor.Full);
+    private final Setting<Font> font = new Setting<>("FontMode", Font.Fast);
+    private final Setting<Armor> armorMode = new Setting<>("ArmorMode", Armor.None);
     private final Setting<Health> health = new Setting<>("Health", Health.Number);
-    private final Setting<Boolean> selfLogo = new Setting<>("SelfLogo", false);
-    private final Setting<Boolean> friendLogo = new Setting<>("FriendLogo", false);
+    private final Setting<Boolean> friendHighlight = new Setting<>("FriendHighlight", true);
 
     public void onRender2D(DrawContext context) {
         if (mc.options.hudHidden) return;
@@ -133,7 +132,6 @@ public class NameTags extends Module {
                 nameText.append(Text.literal(translateGamemode(getEntityGamemode(ent)) + " "));
             }
 
-            // Сброс цвета, чтобы ник не окрашивался в цвет пинга
             nameText.append(Text.literal(Formatting.RESET.toString()));
 
             if (Managers.FRIEND.isFriend(ent) && NameProtect.hideFriends.getValue() && ModuleManager.nameProtect.isEnabled()) {
@@ -252,8 +250,7 @@ public class NameTags extends Module {
 
                 OutlineColor cl = Managers.FRIEND.isFriend(ent) ? friendOutline.getValue() : outline.getValue();
 
-                // Отрисовка логотипа (молнии) для себя и друзей
-                if ((selfLogo.getValue() && ent == mc.player) || (friendLogo.getValue() && Managers.FRIEND.isFriend(ent))) {
+                if (friendHighlight.getValue() && (ent == mc.player || Managers.FRIEND.isFriend(ent))) {
                     Render2DEngine.drawRect(context.getMatrices(), tagX - 14, (float) (posY - 13f), 12, 11, color.brighter().brighter());
                     RenderSystem.enableBlend();
                     RenderSystem.blendFunc(GlStateManager.SrcFactor.SRC_ALPHA, GlStateManager.DstFactor.ONE);
