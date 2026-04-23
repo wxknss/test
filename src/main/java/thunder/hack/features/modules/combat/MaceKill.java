@@ -3,8 +3,6 @@ package thunder.hack.features.modules.combat;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.item.Items;
 import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
 import thunder.hack.events.impl.EventAttack;
 import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
@@ -14,77 +12,99 @@ public class MaceKill extends Module {
         super("MaceKill", Category.COMBAT);
     }
 
-    private final Setting<Integer> fallHeight = new Setting<>("FallHeight", 22, 1, 170);
-    private final Setting<Integer> teleportPackets = new Setting<>("TeleportPackets", 2, 1, 10);
+    private final Setting<Integer> fallHeight = new Setting<>("FallHeight", 22, 5, 100);
+    private final Setting<Integer> teleportPackets = new Setting<>("TeleportPackets", 10, 2, 50);
+    private final Setting<Integer> fallTicks = new Setting<>("FallTicks", 8, 1, 30);
+    private final Setting<Boolean> autoDisable = new Setting<>("AutoDisable", true);
 
-    private boolean isEnabledCache = false;
+    private boolean active;
+    private int tickCounter;
+    private double startY;
+    private boolean hasTeleported;
 
     @Override
     public void onEnable() {
-        isEnabledCache = true;
-    }
-
-    @Override
-    public void onDisable() {
-        isEnabledCache = false;
+        active = false;
+        tickCounter = 0;
+        hasTeleported = false;
     }
 
     @EventHandler
     public void onAttack(EventAttack event) {
-        if (!isEnabled()) return;
         if (fullNullCheck()) return;
-
-        // Проверяем, держим ли мы булаву
         if (mc.player.getMainHandStack().getItem() != Items.MACE) return;
+        if (active) return;
 
-        int height = determineHeight();
-
-        if (height == 0) return;
-
-        // Teleport exploit для больших высот
-        if (height > 10) {
-            int packets = (int) Math.ceil(Math.abs(height / 10.0));
-            for (int i = 0; i < packets; i++) {
-                sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(mc.player.getX(), mc.player.getY(), mc.player.getZ(), false));
-            }
-        } else {
-            // Делаем минимум 2 раза для нейтрализации горизонтального расстояния
-            for (int i = 0; i < teleportPackets.getValue(); i++) {
-                sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(mc.player.getX(), mc.player.getY(), mc.player.getZ(), mc.player.isOnGround()));
-            }
-        }
-
-        // Телепортируемся на рассчитанную высоту
-        sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(
-            mc.player.getX(),
-            mc.player.getY() + height,
-            mc.player.getZ(),
-            false
-        ));
-
-        // Возвращаемся на землю
-        sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(
-            mc.player.getX(),
-            mc.player.getY(),
-            mc.player.getZ(),
-            false
-        ));
+        startY = mc.player.getY();
+        active = true;
+        tickCounter = 0;
+        hasTeleported = false;
     }
 
-    private int determineHeight() {
-        Box boundingBox = mc.player.getBoundingBox();
+    @Override
+    public void onUpdate() {
+        if (!active) return;
 
-        for (int i = fallHeight.getValue(); i >= 1; i--) {
-            Box newBoundingBox = boundingBox.offset(0, i, 0);
+        if (!hasTeleported) {
+            double targetY = startY + fallHeight.getValue();
 
-            // Проверяем, нет ли коллизий с блоками
-            if (mc.world.getBlockCollisions(mc.player, newBoundingBox).iterator().hasNext()) {
-                continue;
+            for (int i = 0; i < teleportPackets.getValue(); i++) {
+                sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(
+                    mc.player.getX(), startY, mc.player.getZ(), true
+                ));
             }
-            return i;
+
+            sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(
+                mc.player.getX(), targetY, mc.player.getZ(), false
+            ));
+
+            for (int i = 0; i < 3; i++) {
+                sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(
+                    mc.player.getX(), targetY, mc.player.getZ(), false
+                ));
+            }
+
+            mc.player.setPosition(mc.player.getX(), targetY, mc.player.getZ());
+            hasTeleported = true;
+            tickCounter = 0;
+            return;
         }
 
-        return 0;
+        tickCounter++;
+
+        if (tickCounter < fallTicks.getValue()) {
+            double airY = startY + fallHeight.getValue();
+            sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(
+                mc.player.getX(), airY, mc.player.getZ(), false
+            ));
+            mc.player.setPosition(mc.player.getX(), airY, mc.player.getZ());
+            mc.player.fallDistance = tickCounter * 5.0f;
+            return;
+        }
+
+        if (tickCounter == fallTicks.getValue()) {
+            mc.player.fallDistance = fallHeight.getValue() * 3.5f;
+
+            sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(
+                mc.player.getX(), startY, mc.player.getZ(), true
+            ));
+            mc.player.setPosition(mc.player.getX(), startY, mc.player.getZ());
+            return;
+        }
+
+        if (tickCounter > fallTicks.getValue()) {
+            sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(
+                mc.player.getX(), startY, mc.player.getZ(), true
+            ));
+            mc.player.setPosition(mc.player.getX(), startY, mc.player.getZ());
+            active = false;
+            hasTeleported = false;
+            tickCounter = 0;
+
+            if (autoDisable.getValue()) {
+                setEnabled(false);
+            }
+        }
     }
 
     @Override
