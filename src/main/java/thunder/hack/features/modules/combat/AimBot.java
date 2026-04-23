@@ -32,8 +32,8 @@ import static net.minecraft.util.math.MathHelper.wrapDegrees;
 
 public final class AimBot extends Module {
     private final Setting<Mode> mode = new Setting<>("Mode", Mode.BowAim);
-    private final Setting<Rotation> rotation = new Setting<>("Rotation", Rotation.Silent, v -> mode.getValue() != Mode.AimAssist);
-    private final Setting<Float> aimRange = new Setting<>("Range", 20f, 1f, 30f, v -> mode.getValue() != Mode.AimAssist);
+    private final Setting<Rotation> rotation = new Setting<>("Rotation", Rotation.Client, v -> mode.getValue() != Mode.AimAssist && mode.getValue() != Mode.FlightHVHHelper);
+    private final Setting<Float> aimRange = new Setting<>("Range", 20f, 1f, 50f, v -> mode.getValue() != Mode.AimAssist);
     private final Setting<Integer> aimStrength = new Setting<>("AimStrength", 30, 1, 100, v -> mode.getValue() == Mode.AimAssist);
     private final Setting<Integer> aimSmooth = new Setting<>("AimSmooth", 45, 1, 180, v -> mode.getValue() == Mode.AimAssist);
     private final Setting<Integer> aimtime = new Setting<>("AimTime", 2, 1, 10, v -> mode.getValue() == Mode.AimAssist);
@@ -89,6 +89,8 @@ public final class AimBot extends Module {
             rotationPitch = pitch;
         } else if (mode.getValue() == Mode.CSAim) {
             calcThread();
+        } else if (mode.getValue() == Mode.FlightHVHHelper) {
+            calcHVH();
         } else {
             if (mc.crosshairTarget.getType() == ENTITY)
                 aimTicks++;
@@ -100,7 +102,7 @@ public final class AimBot extends Module {
                 return;
             }
 
-            PlayerEntity nearestTarget = Managers.COMBAT.getNearestTarget(50);
+            PlayerEntity nearestTarget = Managers.COMBAT.getNearestTarget(5);
             assistAcceleration += aimStrength.getValue() / 10000f;
 
             if (nearestTarget != null) {
@@ -133,7 +135,7 @@ public final class AimBot extends Module {
 
     @EventHandler
     public void onSync(EventSync event) {
-        if (mode.is(Mode.AimAssist))
+        if (mode.is(Mode.AimAssist) || mode.is(Mode.FlightHVHHelper))
             return;
 
         if (mode.is(Mode.CSAim)) {
@@ -166,6 +168,14 @@ public final class AimBot extends Module {
         if (mode.getValue() == Mode.AimAssist) {
             if (Float.isNaN(rotationYaw)) return;
             mc.player.setYaw((float) Render2DEngine.interpolate(mc.player.getYaw(), rotationYaw, assistAcceleration));
+            return;
+        }
+
+        if (mode.getValue() == Mode.FlightHVHHelper) {
+            if (target != null) {
+                mc.player.setYaw(rotationYaw);
+                mc.player.setPitch(rotationPitch);
+            }
             return;
         }
 
@@ -234,6 +244,32 @@ public final class AimBot extends Module {
         double gcdFix = (Math.pow(mc.options.getMouseSensitivity().getValue() * 0.6 + 0.2, 3.0) * 8.0) * 0.15000000596046448;
         rotationYaw = (float) (newYaw - (newYaw - rotationYaw) % gcdFix);
         rotationPitch = (float) (newPitch - (newPitch - rotationPitch) % gcdFix);
+    }
+
+    private void calcHVH() {
+        target = null;
+
+        float bestDistance = 2500f;
+
+        for (Entity entity : mc.world.getEntities()) {
+            if (entity == mc.player) continue;
+            if (!(entity instanceof PlayerEntity)) continue;
+            if (entity instanceof ArmorStandEntity) continue;
+            if (!entity.isAlive()) continue;
+            if (ModuleManager.antiBot.isEnabled() && AntiBot.bots.contains(entity)) continue;
+
+            float dist = mc.player.squaredDistanceTo(entity);
+            if (dist < bestDistance) {
+                bestDistance = dist;
+                target = entity;
+            }
+        }
+
+        if (target != null) {
+            rotationYaw = (float) Math.toDegrees(Math.atan2(target.getZ() - mc.player.getZ(), target.getX() - mc.player.getX())) - 90.0f;
+            rotationPitch = (float) (-Math.toDegrees(Math.atan2(target.getY() + target.getEyeHeight(target.getPose()) - (mc.player.getY() + mc.player.getEyeHeight(mc.player.getPose())),
+                    Math.sqrt(Math.pow(target.getX() - mc.player.getX(), 2) + Math.pow(target.getZ() - mc.player.getZ(), 2)))));
+        }
     }
 
     public void findTarget() {
@@ -310,6 +346,6 @@ public final class AimBot extends Module {
     }
 
     private enum Mode {
-        CSAim, AimAssist, BowAim
+        CSAim, AimAssist, BowAim, FlightHVHHelper
     }
 }
