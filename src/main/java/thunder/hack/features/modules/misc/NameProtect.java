@@ -9,7 +9,7 @@ public class NameProtect extends Module {
         super("NameProtect", Category.MISC);
     }
 
-    public static Setting<String> newName = new Setting<>("name", "Hell_Raider");
+    public static Setting<String> newName = new Setting<>("name", "protected");
     public static Setting<Boolean> hideFriends = new Setting<>("Hide friends", true);
 
     public static String getCustomName() {
