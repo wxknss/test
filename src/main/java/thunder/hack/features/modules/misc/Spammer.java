@@ -20,8 +20,9 @@ public class Spammer extends Module {
     public Setting<WhisperPrefix> whisperPrefix = new Setting<>("WhisperPrefix", WhisperPrefix.W, v -> spamMode.getValue() == SpamMode.Whispers);
     public Setting<Boolean> global = new Setting<>("Global", true, v -> spamMode.getValue() == SpamMode.Chat);
     public Setting<Boolean> antiSpam = new Setting<>("AntiSpam", false);
+    public Setting<Integer> antiSpamLength = new Setting<>("AntiSpamLength", 8, 1, 64, v -> antiSpam.getValue());
     public Setting<Float> delay = new Setting<>("Delay", 5f, 0f, 30f);
-    
+
     private final Timer timer_delay = new Timer();
     private final Random random = new Random();
 
@@ -91,14 +92,13 @@ public class Spammer extends Module {
         }
     }
 
-    public static String generateRandomSymbol() {
-        Random random = new Random();
-        String randomSymbol = "[";
-        randomSymbol += (char) (random.nextInt(26) + 'a');
-        randomSymbol += random.nextInt(10);
-        randomSymbol += (char) (random.nextInt(26) + 'a');
-        randomSymbol += "]";
-        return randomSymbol;
+    private String generateRandomSuffix(int length) {
+        String chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < length; i++) {
+            sb.append(chars.charAt(random.nextInt(chars.length())));
+        }
+        return sb.toString();
     }
 
     @Override
@@ -113,13 +113,13 @@ public class Spammer extends Module {
                 disable(isRu() ? "Вставь фразочки в minecraft thunderhackrecode misc spammer.txt" : "The spammer file is empty! minecraft thunderhackrecode misc spammer.txt");
                 return;
             }
-            
+
             String c = SpamList.get(random.nextInt(SpamList.size()));
-            
+
             if (antiSpam.getValue()) {
-                c += generateRandomSymbol();
+                c += " " + generateRandomSuffix(antiSpamLength.getValue());
             }
-            
+
             if (spamMode.getValue() == SpamMode.Chat) {
                 if (c.charAt(0) == '/') {
                     c = c.replace("/", "");
