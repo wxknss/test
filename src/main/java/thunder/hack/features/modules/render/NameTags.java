@@ -41,13 +41,12 @@ import org.jetbrains.annotations.NotNull;
 import org.joml.Vector4d;
 import org.lwjgl.opengl.GL11;
 import thunder.hack.core.Managers;
-import thunder.hack.core.manager.player.FriendManager;
 import thunder.hack.core.manager.client.ModuleManager;
-import thunder.hack.gui.font.FontRenderers;
 import thunder.hack.features.hud.impl.PotionHud;
 import thunder.hack.features.modules.Module;
 import thunder.hack.features.modules.client.HudEditor;
 import thunder.hack.features.modules.misc.NameProtect;
+import thunder.hack.gui.font.FontRenderers;
 import thunder.hack.setting.Setting;
 import thunder.hack.setting.impl.ColorSetting;
 import thunder.hack.utility.render.Render2DEngine;
@@ -100,11 +99,8 @@ public class NameTags extends Module {
     private final Setting<Font> font = new Setting<>("FontMode", Font.Fancy);
     private final Setting<Armor> armorMode = new Setting<>("ArmorMode", Armor.Full);
     private final Setting<Health> health = new Setting<>("Health", Health.Number);
-
-    public enum Font { Fancy, Fast }
-    public enum Armor { None, Full, Durability }
-    public enum Health { Number, Hearts, Dots }
-    private enum OutlineColor { Sync, Custom, None, New }
+    private final Setting<Boolean> selfLogo = new Setting<>("SelfLogo", false);
+    private final Setting<Boolean> friendLogo = new Setting<>("FriendLogo", false);
 
     public void onRender2D(DrawContext context) {
         if (mc.options.hudHidden) return;
@@ -128,24 +124,34 @@ public class NameTags extends Module {
                 position.z = Math.max(vector.x, position.z);
             }
 
-            String final_string = "";
+            MutableText nameText = Text.empty();
 
-            if (ping.getValue()) final_string += getPingColor(getEntityPing(ent)) + getEntityPing(ent) + "ms " + Formatting.WHITE;
-            if (gamemode.getValue()) final_string += translateGamemode(getEntityGamemode(ent)) + " ";
+            if (ping.getValue()) {
+                nameText.append(Text.literal(getPingColor(getEntityPing(ent)) + getEntityPing(ent) + "ms "));
+            }
+            if (gamemode.getValue()) {
+                nameText.append(Text.literal(translateGamemode(getEntityGamemode(ent)) + " "));
+            }
 
-            if (FriendManager.friends.stream().anyMatch(i -> i.contains(ent.getDisplayName().getString())) && NameProtect.hideFriends.getValue() && ModuleManager.nameProtect.isEnabled()) {
-                final_string += NameProtect.getCustomName() + " ";
+            // Сброс цвета, чтобы ник не окрашивался в цвет пинга
+            nameText.append(Text.literal(Formatting.RESET.toString()));
+
+            if (Managers.FRIEND.isFriend(ent) && NameProtect.hideFriends.getValue() && ModuleManager.nameProtect.isEnabled()) {
+                nameText.append(Text.literal(NameProtect.getCustomName() + " "));
             } else {
-                final_string += ent.getDisplayName().getString() + " ";
+                nameText.append(ent.getDisplayName());
             }
 
             if (hp.getValue() && health.is(Health.Number)) {
-                final_string += getHealthColor(getHealth(ent)) + round2(getHealth(ent)) + " ";
+                nameText.append(Text.literal(" " + getHealthColor(getHealth(ent)) + round2(getHealth(ent))));
             }
 
-            if (distance.getValue()) final_string += String.format("%.1f", mc.player.distanceTo(ent)) + "m ";
-            if (pops.getValue() && Managers.COMBAT.getPops(ent) != 0)
-                final_string += (Formatting.RESET + "" + Managers.COMBAT.getPops(ent));
+            if (distance.getValue()) {
+                nameText.append(Text.literal(" " + String.format("%.1f", mc.player.distanceTo(ent)) + "m"));
+            }
+            if (pops.getValue() && Managers.COMBAT.getPops(ent) != 0) {
+                nameText.append(Text.literal(" " + Formatting.GREEN + Managers.COMBAT.getPops(ent)));
+            }
 
             if (position != null) {
                 double posX = position.x;
@@ -156,9 +162,11 @@ public class NameTags extends Module {
                 float diff = (float) (endPosX - posX) / 2;
                 float textWidth;
 
-                String plainString = Formatting.strip(final_string);
-                if (font.getValue() == Font.Fancy) textWidth = (FontRenderers.sf_bold.getStringWidth(plainString) * 1);
-                else textWidth = mc.textRenderer.getWidth(plainString);
+                if (font.getValue() == Font.Fancy) {
+                    textWidth = (FontRenderers.sf_bold.getStringWidth(nameText.getString()));
+                } else {
+                    textWidth = mc.textRenderer.getWidth(nameText);
+                }
 
                 float tagX = (float) ((posX + diff - textWidth / 2) * 1);
 
@@ -198,14 +206,19 @@ public class NameTags extends Module {
                             int percent = (int) ((durability / (float) armorComponent.getMaxDamage()) * 100F);
 
                             Color color;
-                            if (percent < 33) color = Color.RED;
-                            else if (percent > 33 && percent < 66) color = Color.YELLOW;
-                            else color = Color.GREEN;
+                            if (percent < 33) {
+                                color = Color.RED;
+                            } else if (percent > 33 && percent < 66) {
+                                color = Color.YELLOW;
+                            } else {
+                                color = Color.GREEN;
+                            }
                             context.drawText(mc.textRenderer, percent + "%", 0, 0, color.getRGB(), false);
                             context.getMatrices().pop();
                         }
 
                         float enchantmentY = 0;
+
                         ItemEnchantmentsComponent enchants = EnchantmentHelper.getEnchantments(armorComponent);
 
                         if (enchantss.getValue()) {
@@ -225,7 +238,8 @@ public class NameTags extends Module {
                                             context.getMatrices().pop();
                                         }
                                         enchantmentY -= 8;
-                                        if (maxEnchantY > enchantmentY) maxEnchantY = enchantmentY;
+                                        if (maxEnchantY > enchantmentY)
+                                            maxEnchantY = enchantmentY;
                                     }
                                 }
                             }
@@ -235,14 +249,11 @@ public class NameTags extends Module {
                 }
 
                 Color color = Managers.FRIEND.isFriend(ent) ? fillColorF.getValue().getColorObject() : fillColorA.getValue().getColorObject();
+
                 OutlineColor cl = Managers.FRIEND.isFriend(ent) ? friendOutline.getValue() : outline.getValue();
 
-                if (cl == OutlineColor.New)
-                    Render2DEngine.drawRectWithOutline(context.getMatrices(), tagX - 2, (float) (posY - 13f), textWidth + 4, 11, color, outlineColor.getValue().getColorObject());
-                else
-                    Render2DEngine.drawRect(context.getMatrices(), tagX - 2, (float) (posY - 13f), textWidth + 4, 11, color);
-
-                if (Managers.TELEMETRY.getOnlinePlayers().contains(ent.getGameProfile().getName())) {
+                // Отрисовка логотипа (молнии) для себя и друзей
+                if ((selfLogo.getValue() && ent == mc.player) || (friendLogo.getValue() && Managers.FRIEND.isFriend(ent))) {
                     Render2DEngine.drawRect(context.getMatrices(), tagX - 14, (float) (posY - 13f), 12, 11, color.brighter().brighter());
                     RenderSystem.enableBlend();
                     RenderSystem.blendFunc(GlStateManager.SrcFactor.SRC_ALPHA, GlStateManager.DstFactor.ONE);
@@ -253,6 +264,11 @@ public class NameTags extends Module {
                     RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
                     RenderSystem.disableBlend();
                 }
+
+                if (cl == OutlineColor.New)
+                    Render2DEngine.drawRectWithOutline(context.getMatrices(), tagX - 2, (float) (posY - 13f), textWidth + 4, 11, color, outlineColor.getValue().getColorObject());
+                else
+                    Render2DEngine.drawRect(context.getMatrices(), tagX - 2, (float) (posY - 13f), textWidth + 4, 11, color);
 
                 switch (cl) {
                     case None, New -> {}
@@ -271,11 +287,11 @@ public class NameTags extends Module {
                 }
 
                 if (font.getValue() == Font.Fancy) {
-                    FontRenderers.sf_bold.drawString(context.getMatrices(), final_string, tagX, (float) posY - 10, -1);
+                    FontRenderers.sf_bold.drawString(context.getMatrices(), nameText.getString(), tagX, (float) posY - 10, -1);
                 } else {
                     context.getMatrices().push();
                     context.getMatrices().translate(tagX, ((float) posY - 11), 0);
-                    context.drawText(mc.textRenderer, final_string, 0, 0, -1, false);
+                    context.drawText(mc.textRenderer, nameText, 0, 0, -1, false);
                     context.getMatrices().pop();
                 }
 
@@ -323,7 +339,6 @@ public class NameTags extends Module {
 
                 if (spawner.getLogic().getRotation() == spawner.getLogic().getLastRotation() && spawner.getLogic().getRotation() == 0f && (float) spawner.getLogic().spawnDelay / 20f == 1f)
                     final_string = spawner.getLogic().getRenderedEntity(mc.world, spawner.getPos()).getName().getString() + " loot!";
-
 
                 if (position != null) {
                     double posX = position.x;
@@ -487,7 +502,6 @@ public class NameTags extends Module {
                 }
             }
         }
-
     }
 
     private void drawHeart(DrawContext context, HeartType type, int x, boolean half, PlayerEntity player) {
@@ -633,5 +647,21 @@ public class NameTags extends Module {
         RenderSystem.texParameter(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR_MIPMAP_LINEAR);
         context.drawTexture(TextureStorage.container, x, y, 0, 0, 176, 67, 176, 67);
         RenderSystem.enableBlend();
+    }
+
+    public enum Font {
+        Fancy, Fast
+    }
+
+    public enum Armor {
+        None, Full, Durability
+    }
+
+    public enum Health {
+        Number, Hearts, Dots
+    }
+
+    private enum OutlineColor {
+        Sync, Custom, None, New
     }
 }
