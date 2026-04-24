@@ -12,7 +12,7 @@ import net.minecraft.item.SwordItem;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
 import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
-import net.minecraft.network.packet.s2c.play.ClientboundSetEquipmentPacket;
+import net.minecraft.network.packet.s2c.play.EntityEquipmentUpdateS2CPacket;
 import net.minecraft.network.packet.s2c.play.PlayerListS2CPacket;
 import net.minecraft.text.Style;
 import net.minecraft.text.Text;
@@ -51,13 +51,13 @@ public class MurderMystery extends Module {
             return;
         }
 
-        if (event.getPacket() instanceof ClientboundSetEquipmentPacket packet) {
-            Entity entity = mc.world.getEntityById(packet.getEntity());
+        if (event.getPacket() instanceof EntityEquipmentUpdateS2CPacket packet) {
+            Entity entity = mc.world.getEntityById(packet.getEntityId());
             if (!(entity instanceof PlayerEntity player)) return;
             if (player == mc.player) return;
             if (!player.isAlive()) return;
 
-            for (var pair : packet.getSlots()) {
+            for (var pair : packet.getEquipmentList()) {
                 if (pair.getFirst() != EquipmentSlot.MAINHAND) continue;
                 ItemStack held = pair.getSecond();
                 if (held.isEmpty()) return;
