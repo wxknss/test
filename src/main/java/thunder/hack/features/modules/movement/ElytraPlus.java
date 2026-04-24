@@ -357,7 +357,7 @@ public class ElytraPlus extends Module {
         return mc.world.getBlockCollisions(mc.player, mc.player.getBoundingBox().expand(-0.25, 0.0, -0.25).offset(0.0, -0.3, 0.0)).iterator().hasNext();
     }
 
-    // --------------- FIREWORK MODE (сохранено как было) ---------------
+    // --------------- FIREWORK MODE ---------------
     private void fireworkOnEnable() {
         if (mc.player.getEquippedStack(EquipmentSlot.CHEST).getItem() != Items.ELYTRA && mc.player.currentScreenHandler.getCursorStack().getItem() != Items.ELYTRA && InventoryUtility.getElytra() == -1) { noElytra(); return; }
         if (getFireWorks(false) == -1) { noFireworks(); return; }
@@ -408,4 +408,74 @@ public class ElytraPlus extends Module {
     private boolean checkGround(float f) { return !mc.world.getBlockCollisions(mc.player, mc.player.getBoundingBox().offset(0.0, -f, 0.0)).iterator().hasNext(); }
     private void noFireworks() { disable(isRu() ? "Нету фейерверков в инвентаре!" : "No fireworks in the hotbar!"); flying = false; }
     private void noElytra() { disable(isRu() ? "Нету элитр в инвентаре!" : "No elytras found in the inventory!"); flying = false; }
+
+    private void reset() {
+        slotWithFireWorks = -1;
+        prevItemInHand = Items.AIR;
+        getStackInSlotCopy = null;
+    }
+
+    private void resetPrevItems() {
+        prevElytraSlot = -1;
+        prevArmorItem = Items.AIR;
+        prevArmorItemCopy = null;
+    }
+
+    private int getFireWorks(boolean hotbar) {
+        if (hotbar) {
+            return InventoryUtility.findItemInHotBar(Items.FIREWORK_ROCKET).slot();
+        } else return InventoryUtility.findItemInInventory(Items.FIREWORK_ROCKET).slot();
+    }
+
+    private void returnItem() {
+        if (slotWithFireWorks == -1 || getStackInSlotCopy == null || prevItemInHand == Items.FIREWORK_ROCKET || prevItemInHand == Items.AIR) return;
+        int n2 = findInInventory(getStackInSlotCopy, prevItemInHand);
+        n2 = n2 < 9 && n2 != -1 ? n2 + 36 : n2;
+        clickSlot(n2);
+        clickSlot(fireSlot.getValue() - 1 + 36);
+        clickSlot(n2);
+    }
+
+    private void returnChestPlate() {
+        if (prevElytraSlot != -1 && prevArmorItem != Items.AIR) {
+            if (!elytraEquiped) return;
+            ItemStack is = mc.player.getInventory().getStack(prevElytraSlot);
+            boolean bl2 = is != ItemStack.EMPTY && !ItemStack.areItemsEqual(is, prevArmorItemCopy);
+            int n2 = findInInventory(prevArmorItemCopy, prevArmorItem);
+            n2 = n2 < 9 && n2 != -1 ? n2 + 36 : n2;
+            if (mc.player.currentScreenHandler.getCursorStack().getItem() != Items.AIR) {
+                clickSlot(6);
+                if (prevElytraSlot != -1) clickSlot(prevElytraSlot);
+                return;
+            }
+            if (n2 == -1) return;
+            clickSlot(n2);
+            clickSlot(6);
+            if (!bl2) {
+                clickSlot(n2);
+            } else {
+                int n4 = findEmpty(false);
+                if (n4 != -1) clickSlot(n4);
+            }
+        }
+        resetPrevItems();
+    }
+
+    public static int findInInventory(ItemStack stack, Item item) {
+        if (stack == null) return -1;
+        for (int i = 0; i < 45; ++i) {
+            ItemStack is = mc.player.getInventory().getStack(i);
+            if (!ItemStack.areItemsEqual(is, stack) || is.getItem() != item) continue;
+            return i;
+        }
+        return -1;
+    }
+
+    public static int findEmpty(boolean hotbar) {
+        for (int i = hotbar ? 0 : 9; i < (hotbar ? 9 : 45); ++i) {
+            if (!mc.player.getInventory().getStack(i).isEmpty()) continue;
+            return i;
+        }
+        return -1;
+    }
 }
