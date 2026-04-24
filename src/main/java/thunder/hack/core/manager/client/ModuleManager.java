@@ -68,6 +68,7 @@ public class ModuleManager implements IManager {
     public static AntiServerAdd antiServerAdd = new AntiServerAdd();
     public static AntiLegitMiss antiLegitMiss = new AntiLegitMiss();
     public static AntiBallPlace antiBallPlace = new AntiBallPlace();
+    public static MurderMystery murderMystery = new MurderMystery();
     public static TridentBoost tridentBoost = new TridentBoost();
     public static Trajectories trajectories = new Trajectories();
     public static TargetStrafe targetStrafe = new TargetStrafe();
