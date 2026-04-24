@@ -31,7 +31,6 @@ import net.minecraft.scoreboard.ScoreboardDisplaySlot;
 import net.minecraft.scoreboard.ScoreboardObjective;
 import net.minecraft.scoreboard.number.StyledNumberFormat;
 import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.MathHelper;
@@ -41,12 +40,13 @@ import org.jetbrains.annotations.NotNull;
 import org.joml.Vector4d;
 import org.lwjgl.opengl.GL11;
 import thunder.hack.core.Managers;
+import thunder.hack.core.manager.player.FriendManager;
 import thunder.hack.core.manager.client.ModuleManager;
+import thunder.hack.gui.font.FontRenderers;
 import thunder.hack.features.hud.impl.PotionHud;
 import thunder.hack.features.modules.Module;
 import thunder.hack.features.modules.client.HudEditor;
 import thunder.hack.features.modules.misc.NameProtect;
-import thunder.hack.gui.font.FontRenderers;
 import thunder.hack.setting.Setting;
 import thunder.hack.setting.impl.ColorSetting;
 import thunder.hack.utility.render.Render2DEngine;
@@ -73,8 +73,8 @@ public class NameTags extends Module {
         encMap.put(Enchantments.THORNS, "T");
     }
 
-    private final Setting<Boolean> self = new Setting<>("Self", true);
-    private final Setting<Float> scale = new Setting<>("Scale", 0.7f, 0.1f, 10f);
+    private final Setting<Boolean> self = new Setting<>("Self", false);
+    private final Setting<Float> scale = new Setting<>("Scale", 1f, 0.1f, 10f);
     private final Setting<Boolean> resize = new Setting<>("Resize", false);
     private final Setting<Float> height = new Setting<>("Height", 2f, 0.1f, 10f);
     private final Setting<Boolean> gamemode = new Setting<>("Gamemode", false);
@@ -82,24 +82,24 @@ public class NameTags extends Module {
     private final Setting<Boolean> entityOwner = new Setting<>("EntityOwner", false);
     private final Setting<Boolean> ping = new Setting<>("Ping", false);
     private final Setting<Boolean> hp = new Setting<>("HP", true);
-    private final Setting<Boolean> distance = new Setting<>("Distance", false);
-    private final Setting<Boolean> pops = new Setting<>("TotemPops", false);
+    private final Setting<Boolean> distance = new Setting<>("Distance", true);
+    private final Setting<Boolean> pops = new Setting<>("TotemPops", true);
     private final Setting<OutlineColor> outline = new Setting<>("OutlineType", OutlineColor.New);
     private final Setting<OutlineColor> friendOutline = new Setting<>("FriendOutline", OutlineColor.None);
     private final Setting<ColorSetting> outlineColor = new Setting<>("OutlineColor", new ColorSetting(0x80000000));
     private final Setting<ColorSetting> friendOutlineColor = new Setting<>("FriendOutlineColor", new ColorSetting(0x80000000));
-    private final Setting<Boolean> enchantss = new Setting<>("Enchants", false);
+    private final Setting<Boolean> enchantss = new Setting<>("Enchants", true);
     private final Setting<Boolean> onlyHands = new Setting<>("OnlyHands", false, v -> enchantss.getValue());
-    private final Setting<Boolean> funtimeHp = new Setting<>("FunTimeHp", true);
+    private final Setting<Boolean> funtimeHp = new Setting<>("FunTimeHp", false);
     private final Setting<Boolean> ignoreBots = new Setting<>("IgnoreBots", false);
-    private final Setting<Boolean> potions = new Setting<>("Potions", false);
-    private final Setting<Boolean> shulkers = new Setting<>("Shulkers", false);
+    private final Setting<Boolean> potions = new Setting<>("Potions", true);
+    private final Setting<Boolean> shulkers = new Setting<>("Shulkers", true);
     private final Setting<ColorSetting> fillColorA = new Setting<>("Fill", new ColorSetting(0x80000000));
     private final Setting<ColorSetting> fillColorF = new Setting<>("FriendFill", new ColorSetting(0x80000000));
-    private final Setting<Font> font = new Setting<>("FontMode", Font.Fast);
-    private final Setting<Armor> armorMode = new Setting<>("ArmorMode", Armor.None);
+    private final Setting<Font> font = new Setting<>("FontMode", Font.Fancy);
+    private final Setting<Armor> armorMode = new Setting<>("ArmorMode", Armor.Full);
     private final Setting<Health> health = new Setting<>("Health", Health.Number);
-    private final Setting<Boolean> friendHighlight = new Setting<>("FriendHighlight", true);
+
 
     public void onRender2D(DrawContext context) {
         if (mc.options.hudHidden) return;
@@ -123,33 +123,24 @@ public class NameTags extends Module {
                 position.z = Math.max(vector.x, position.z);
             }
 
-            MutableText nameText = Text.empty();
+            String final_string = "";
 
-            if (ping.getValue()) {
-                nameText.append(Text.literal(getPingColor(getEntityPing(ent)) + getEntityPing(ent) + "ms "));
-            }
-            if (gamemode.getValue()) {
-                nameText.append(Text.literal(translateGamemode(getEntityGamemode(ent)) + " "));
-            }
+            if (ping.getValue()) final_string += getPingColor(getEntityPing(ent)) + getEntityPing(ent) + "ms " + Formatting.WHITE;
+            if (gamemode.getValue()) final_string += translateGamemode(getEntityGamemode(ent)) + " ";
 
-            nameText.append(Text.literal(Formatting.RESET.toString()));
-
-            if (Managers.FRIEND.isFriend(ent) && NameProtect.hideFriends.getValue() && ModuleManager.nameProtect.isEnabled()) {
-                nameText.append(Text.literal(NameProtect.getCustomName() + " "));
+            if (FriendManager.friends.stream().anyMatch(i -> i.contains(ent.getDisplayName().getString())) && NameProtect.hideFriends.getValue() && ModuleManager.nameProtect.isEnabled()) {
+                final_string += NameProtect.getCustomName() + " ";
             } else {
-                nameText.append(ent.getDisplayName());
+                final_string += ent.getDisplayName().getString() + " ";
             }
 
             if (hp.getValue() && health.is(Health.Number)) {
-                nameText.append(Text.literal(" " + getHealthColor(getHealth(ent)) + round2(getHealth(ent))));
+                final_string += getHealthColor(getHealth(ent)) + round2(getHealth(ent)) + " ";
             }
 
-            if (distance.getValue()) {
-                nameText.append(Text.literal(" " + String.format("%.1f", mc.player.distanceTo(ent)) + "m"));
-            }
-            if (pops.getValue() && Managers.COMBAT.getPops(ent) != 0) {
-                nameText.append(Text.literal(" " + Formatting.GREEN + Managers.COMBAT.getPops(ent)));
-            }
+            if (distance.getValue()) final_string += String.format("%.1f", mc.player.distanceTo(ent)) + "m ";
+            if (pops.getValue() && Managers.COMBAT.getPops(ent) != 0)
+                final_string += (Formatting.RESET + "" + Managers.COMBAT.getPops(ent));
 
             if (position != null) {
                 double posX = position.x;
@@ -160,11 +151,8 @@ public class NameTags extends Module {
                 float diff = (float) (endPosX - posX) / 2;
                 float textWidth;
 
-                if (font.getValue() == Font.Fancy) {
-                    textWidth = (FontRenderers.sf_bold.getStringWidth(nameText.getString()));
-                } else {
-                    textWidth = mc.textRenderer.getWidth(nameText);
-                }
+                if (font.getValue() == Font.Fancy) textWidth = (FontRenderers.sf_bold.getStringWidth(final_string) * 1);
+                else textWidth = mc.textRenderer.getWidth(final_string);
 
                 float tagX = (float) ((posX + diff - textWidth / 2) * 1);
 
@@ -219,6 +207,7 @@ public class NameTags extends Module {
 
                         ItemEnchantmentsComponent enchants = EnchantmentHelper.getEnchantments(armorComponent);
 
+
                         if (enchantss.getValue()) {
                             if (!onlyHands.getValue() || (armorComponent == ent.getOffHandStack() || armorComponent == ent.getMainHandStack())) {
                                 for (RegistryKey<Enchantment> enchantment : encMap.keySet()) {
@@ -250,25 +239,15 @@ public class NameTags extends Module {
 
                 OutlineColor cl = Managers.FRIEND.isFriend(ent) ? friendOutline.getValue() : outline.getValue();
 
-                if (friendHighlight.getValue() && (ent == mc.player || Managers.FRIEND.isFriend(ent))) {
-                    Render2DEngine.drawRect(context.getMatrices(), tagX - 14, (float) (posY - 13f), 12, 11, color.brighter().brighter());
-                    RenderSystem.enableBlend();
-                    RenderSystem.blendFunc(GlStateManager.SrcFactor.SRC_ALPHA, GlStateManager.DstFactor.ONE);
-                    Color lColor = HudEditor.getColor(0);
-                    RenderSystem.setShaderColor(lColor.getRed() / 255f, lColor.getGreen() / 255f, lColor.getBlue() / 255f, 1f);
-                    RenderSystem.setShaderTexture(0, TextureStorage.miniLogo);
-                    Render2DEngine.renderTexture(context.getMatrices(), tagX - 13, (float) (posY - 12.5f), 10, 10, 0, 0, 256, 256, 256, 256);
-                    RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
-                    RenderSystem.disableBlend();
-                }
-
                 if (cl == OutlineColor.New)
                     Render2DEngine.drawRectWithOutline(context.getMatrices(), tagX - 2, (float) (posY - 13f), textWidth + 4, 11, color, outlineColor.getValue().getColorObject());
                 else
                     Render2DEngine.drawRect(context.getMatrices(), tagX - 2, (float) (posY - 13f), textWidth + 4, 11, color);
 
                 switch (cl) {
-                    case None, New -> {}
+                    case None, New -> {
+
+                    }
                     case Sync -> {
                         Render2DEngine.drawRect(context.getMatrices(), tagX - 3, (float) (posY - 14f), textWidth + 6, 1, HudEditor.getColor(270));
                         Render2DEngine.drawRect(context.getMatrices(), tagX - 3, (float) (posY - 3f), textWidth + 6, 1, HudEditor.getColor(0));
@@ -283,12 +262,13 @@ public class NameTags extends Module {
                     }
                 }
 
+
                 if (font.getValue() == Font.Fancy) {
-                    FontRenderers.sf_bold.drawString(context.getMatrices(), nameText.getString(), tagX, (float) posY - 10, -1);
+                    FontRenderers.sf_bold.drawString(context.getMatrices(), final_string, tagX, (float) posY - 10, -1);
                 } else {
                     context.getMatrices().push();
                     context.getMatrices().translate(tagX, ((float) posY - 11), 0);
-                    context.drawText(mc.textRenderer, nameText, 0, 0, -1, false);
+                    context.drawText(mc.textRenderer, final_string, 0, 0, -1, false);
                     context.getMatrices().pop();
                 }
 
@@ -337,6 +317,7 @@ public class NameTags extends Module {
                 if (spawner.getLogic().getRotation() == spawner.getLogic().getLastRotation() && spawner.getLogic().getRotation() == 0f && (float) spawner.getLogic().spawnDelay / 20f == 1f)
                     final_string = spawner.getLogic().getRenderedEntity(mc.world, spawner.getPos()).getName().getString() + " loot!";
 
+
                 if (position != null) {
                     double posX = position.x;
                     double posY = position.y;
@@ -349,7 +330,9 @@ public class NameTags extends Module {
                     Render2DEngine.drawRect(context.getMatrices(), tagX - 2, (float) (posY - 13f), textWidth + 4, 11, fillColorA.getValue().getColorObject());
 
                     switch (outline.getValue()) {
-                        case None -> {}
+                        case None -> {
+
+                        }
                         case Sync -> {
                             Render2DEngine.drawRect(context.getMatrices(), tagX - 3, (float) (posY - 14f), textWidth + 6, 1, HudEditor.getColor(270));
                             Render2DEngine.drawRect(context.getMatrices(), tagX - 3, (float) (posY - 3f), textWidth + 6, 1, HudEditor.getColor(0));
@@ -363,6 +346,7 @@ public class NameTags extends Module {
                             Render2DEngine.drawRect(context.getMatrices(), tagX + textWidth + 2, (float) (posY - 14f), 1, 11, outlineColor.getValue().getColorObject());
                         }
                     }
+
 
                     FontRenderers.sf_bold.drawString(context.getMatrices(), final_string, tagX, (float) posY - 10, -1);
                 }
@@ -407,7 +391,9 @@ public class NameTags extends Module {
                 Render2DEngine.drawRect(context.getMatrices(), tagX - 2, (float) (posY - 13f), textWidth + 4, 11, fillColorA.getValue().getColorObject());
 
                 switch (outline.getValue()) {
-                    case None -> {}
+                    case None -> {
+
+                    }
                     case Sync -> {
                         Render2DEngine.drawRect(context.getMatrices(), tagX - 3, (float) (posY - 14f), textWidth + 6, 1, HudEditor.getColor(270));
                         Render2DEngine.drawRect(context.getMatrices(), tagX - 3, (float) (posY - 3f), textWidth + 6, 1, HudEditor.getColor(0));
@@ -464,7 +450,8 @@ public class NameTags extends Module {
             float numValue = 0;
             try {
                 numValue = Float.parseFloat(resolvedHp);
-            } catch (NumberFormatException ignored) {}
+            } catch (NumberFormatException ignored) {
+            }
             return numValue;
         } else return ent.getHealth() + ent.getAbsorptionAmount();
     }
@@ -499,10 +486,12 @@ public class NameTags extends Module {
                 }
             }
         }
+
     }
 
     private void drawHeart(DrawContext context, HeartType type, int x, boolean half, PlayerEntity player) {
         if (health.is(Health.Dots)) {
+
             Color color = Managers.FRIEND.isFriend(player) ? fillColorF.getValue().getColorObject() : fillColorA.getValue().getColorObject();
             if (type == HeartType.CONTAINER) {
                 Render2DEngine.drawRect(context.getMatrices(), x, 0, 7, 3, color);
@@ -518,9 +507,7 @@ public class NameTags extends Module {
     }
 
     private enum HeartType {
-        CONTAINER(Identifier.of("hud/heart/container"), Identifier.of("hud/heart/container")),
-        NORMAL(Identifier.of("hud/heart/full"), Identifier.of("hud/heart/half")),
-        ABSORBING(Identifier.of("hud/heart/absorbing_full"), Identifier.of("hud/heart/absorbing_half"));
+        CONTAINER(Identifier.of("hud/heart/container"), Identifier.of("hud/heart/container")), NORMAL(Identifier.of("hud/heart/full"), Identifier.of("hud/heart/half")), ABSORBING(Identifier.of("hud/heart/absorbing_full"), Identifier.of("hud/heart/absorbing_half"));
 
         private final Identifier fullTexture;
         private final Identifier halfTexture;
@@ -583,6 +570,7 @@ public class NameTags extends Module {
             FontRenderers.sf_bold_mini.drawCenteredString(context.getMatrices(), PotionHud.getDuration(statusEffectInstance), 9, -8, -1);
             FontRenderers.categories.drawCenteredString(context.getMatrices(), power, 9, -16, -1);
             context.getMatrices().pop();
+
         }
         RenderSystem.disableBlend();
     }
