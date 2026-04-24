@@ -3,25 +3,34 @@ package thunder.hack.features.modules.movement;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
+import net.minecraft.util.math.Vec3d;
 import thunder.hack.ThunderHack;
+import thunder.hack.core.Managers;
 import thunder.hack.core.manager.client.ModuleManager;
 import thunder.hack.events.impl.EventSync;
 import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
+import thunder.hack.utility.Timer;
+import thunder.hack.utility.player.MovementUtility;
 import thunder.hack.utility.world.HoleUtility;
 
 public class Step extends Module {
     private final Setting<Boolean> strict = new Setting<>("Strict", false);
     private final Setting<Float> height = new Setting<>("Height", 2.0F, 1F, 2.5F, v -> !strict.getValue());
-    private final Setting<Boolean> useTimer = new Setting<>("Timer", true);
+    private final Setting<Boolean> useTimer = new Setting<>("Timer", false);
     private final Setting<Boolean> pauseIfShift = new Setting<>("PauseIfShift", false);
     private final Setting<Integer> stepDelay = new Setting<>("StepDelay", 200, 0, 1000);
     private final Setting<Boolean> holeDisable = new Setting<>("HoleDisable", false);
     private final Setting<Mode> mode = new Setting<>("Mode", Mode.NCP);
 
-    private final thunder.hack.utility.Timer stepTimer = new thunder.hack.utility.Timer();
+    private final Timer stepTimer = new Timer();
+    private final Timer packetTimer = new Timer();
     private boolean alreadyInHole;
     private boolean timer;
+    private boolean stepping;
+    private int packetIndex;
+    private double[] offsets;
+    private double prevX, prevZ;
 
     public Step() {
         super("Step", Category.MOVEMENT);
@@ -30,12 +39,14 @@ public class Step extends Module {
     @Override
     public void onEnable() {
         alreadyInHole = mc.player != null && HoleUtility.isHole(mc.player.getBlockPos());
+        stepping = false;
     }
 
     @Override
     public void onDisable() {
         ThunderHack.TICK_TIMER = 1f;
         setStepHeight(0.6F);
+        stepping = false;
     }
 
     @Override
@@ -61,30 +72,64 @@ public class Step extends Module {
             timer = false;
         }
 
-        if (mc.player.isOnGround() && stepTimer.passedMs(stepDelay.getValue())) setStepHeight(height.getValue());
-        else setStepHeight(0.6F);
+        if (stepping) {
+            sendPackets();
+        } else if (mc.player.isOnGround() && stepTimer.passedMs(stepDelay.getValue())) {
+            setStepHeight(height.getValue());
+        } else {
+            setStepHeight(0.6F);
+        }
     }
 
     @EventHandler
     public void onStep(EventSync event) {
-        if (mode.getValue() == Mode.NCP) {
-            double stepHeight = mc.player.getY() - mc.player.prevY;
+        if (mode.getValue() != Mode.NCP) return;
 
-            if (stepHeight <= 0.75 || stepHeight > height.getValue() || (strict.getValue() && stepHeight > 1)) return;
+        double stepHeight = mc.player.getY() - mc.player.prevY;
+        if (stepHeight <= 0.6 || stepHeight > height.getValue() || (strict.getValue() && stepHeight > 1)) return;
 
-            double[] offsets = getOffset(stepHeight);
-            if (offsets != null && offsets.length > 1) {
-                if (useTimer.getValue()) {
-                    ThunderHack.TICK_TIMER = 1F / offsets.length;
-                    timer = true;
-                }
-                for (double offset : offsets)
-                    sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(mc.player.prevX, mc.player.prevY + offset, mc.player.prevZ, false));
-                if (strict.getValue())
-                    sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(mc.player.prevX, mc.player.prevY + stepHeight, mc.player.prevZ, false));
-            }
-            stepTimer.reset();
+        offsets = getOffset(stepHeight);
+        if (offsets == null || offsets.length == 0) return;
+
+        prevX = mc.player.prevX;
+        prevZ = mc.player.prevZ;
+        packetIndex = 0;
+        stepping = true;
+
+        if (useTimer.getValue()) {
+            ThunderHack.TICK_TIMER = 1.0f / offsets.length;
+            timer = true;
         }
+
+        stepTimer.reset();
+    }
+
+    private void sendPackets() {
+        if (!stepping || offsets == null) return;
+
+        if (packetIndex < offsets.length) {
+            double offset = offsets[packetIndex];
+            sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(prevX, prevX + offset, prevZ, false));
+            packetIndex++;
+            return;
+        }
+
+        // Финальный пакет с реальной позицией и горизонтальным движением
+        Vec3d motion = new Vec3d(mc.player.getVelocity().x, 0, mc.player.getVelocity().z);
+        if (motion.length() < 0.18) {
+            double[] strafe = MovementUtility.forward(0.1838601407459074);
+            motion = new Vec3d(strafe[0], 0, strafe[1]);
+        }
+
+        sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(
+                mc.player.getX() + motion.x,
+                mc.player.getY() - (mc.player.getY() % 1.0),
+                mc.player.getZ() + motion.z,
+                true
+        ));
+
+        stepping = false;
+        offsets = null;
     }
 
     public double[] getOffset(double h) {
@@ -102,5 +147,5 @@ public class Step extends Module {
         mc.player.getAttributeInstance(EntityAttributes.GENERIC_STEP_HEIGHT).setBaseValue(v);
     }
 
-    public enum Mode {NCP, VANILLA}
+    public enum Mode { NCP, VANILLA }
 }
