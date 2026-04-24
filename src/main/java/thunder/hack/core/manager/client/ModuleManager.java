@@ -30,7 +30,7 @@ public class ModuleManager implements IManager {
     public List<Module> sortedModules = new ArrayList<>();
     public List<Integer> activeMouseKeys = new ArrayList<>();
 
-    // Удалён PenisESP, DurabilityAlert, VoidESP, Parkour (как в декомпиленном)
+    // Удалён PenisESP, DurabilityAlert, VoidESP, Parkour
     
     public static AntiPacketException antiPacketException = new AntiPacketException();
     public static LevitationControl levitationControl = new LevitationControl();
@@ -189,7 +189,6 @@ public class ModuleManager implements IManager {
     public static AutoBuy autoBuy = new AutoBuy();
     public static AntiFireball antiFireball = new AntiFireball();
     public static ItemDropper itemDropper = new ItemDropper();
-    public static MaceKill maceKill = new MaceKill();
     public static ArmorHud armorHud = new ArmorHud();
     public static AirPlace airPlace = new AirPlace();
     public static SelfTrap selfTrap = new SelfTrap();
