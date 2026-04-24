@@ -8,11 +8,11 @@ import net.minecraft.item.ShearsItem;
 import net.minecraft.item.SwordItem;
 import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
 import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
+import net.minecraft.network.packet.s2c.play.PlayerListS2CPacket;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import thunder.hack.core.Managers;
 import thunder.hack.events.impl.PacketEvent;
-import thunder.hack.events.impl.WorldChangeEvent;
 import thunder.hack.features.modules.Module;
 import thunder.hack.features.modules.combat.AntiBot;
 import thunder.hack.setting.Setting;
@@ -36,9 +36,11 @@ public class MurderMystery extends Module {
     private String detectiveName = null;
 
     @EventHandler
-    public void onWorldChange(WorldChangeEvent event) {
-        killerName = null;
-        detectiveName = null;
+    public void onPacketReceive(PacketEvent.Receive event) {
+        if (event.getPacket() instanceof PlayerListS2CPacket) {
+            killerName = null;
+            detectiveName = null;
+        }
     }
 
     @Override
