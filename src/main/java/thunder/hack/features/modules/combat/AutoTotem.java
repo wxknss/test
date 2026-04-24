@@ -67,19 +67,16 @@ public final class AutoTotem extends Module {
     private final Setting<Boolean> crappleSpoof = new Setting<>("CrappleSpoof", true, v -> offhand.getValue() == OffHand.GApple);
 
     private enum OffHand {Totem, Crystal, GApple, Shield}
-
-    private enum Mode {Default, Alternative, Matrix, MatrixPick, NewVersion}
-
+    private enum Mode {Default, Alternative, Matrix, MatrixPick, NewVersion, Bypass}
     private enum Swap {GappleShield, BallShield, GappleBall, BallTotem}
-
     public enum RCGap {Off, Always, OnlySafe}
 
-
     private int delay;
-
     private Timer bindDelay = new Timer();
-
     private Item prevItem;
+    private int oldOffhandSlot = -1;
+    private ItemStack oldOffhandItem = ItemStack.EMPTY;
+    private boolean bypassSwapped = false;
 
     public AutoTotem() {
         super("AutoTotem", Category.COMBAT);
@@ -87,12 +84,111 @@ public final class AutoTotem extends Module {
 
     @EventHandler
     public void onSync(EventSync e) {
-        swapTo(getItemSlot());
+        if (mode.is(Mode.Bypass)) {
+            bypassMode();
+        } else {
+            swapTo(getItemSlot());
+        }
 
         if (rcGap.not(RCGap.Off) && (mc.player.getMainHandStack().getItem() instanceof SwordItem) && mc.options.useKey.isPressed() && !mc.player.isUsingItem())
             ((IMinecraftClient) mc).idoItemUse();
 
         delay--;
+    }
+
+    private void bypassMode() {
+        boolean hasTotemInHands = mc.player.getOffHandStack().getItem() == Items.TOTEM_OF_UNDYING
+                || mc.player.getMainHandStack().getItem() == Items.TOTEM_OF_UNDYING;
+
+        if (canSwap()) {
+            if (!hasTotemInHands) {
+                int totemSlot = findTotemSlot();
+                if (totemSlot != -1) {
+                    if (oldOffhandItem.isEmpty() && !mc.player.getOffHandStack().isEmpty()) {
+                        oldOffhandItem = mc.player.getOffHandStack().copy();
+                        oldOffhandSlot = totemSlot;
+                    }
+
+                    if (totemSlot < 9) {
+                        sendPacket(new UpdateSelectedSlotC2SPacket(totemSlot));
+                        mc.player.getInventory().selectedSlot = totemSlot;
+                        sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
+                        sendPacket(new UpdateSelectedSlotC2SPacket(mc.player.getInventory().selectedSlot));
+                    } else {
+                        mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, totemSlot, 40, SlotActionType.SWAP, mc.player);
+                        sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
+                    }
+                    bypassSwapped = true;
+                }
+            }
+        } else if (!oldOffhandItem.isEmpty()) {
+            if (mc.player.getOffHandStack().getItem() == Items.TOTEM_OF_UNDYING) {
+                int returnSlot = findReturnSlot();
+                if (returnSlot != -1) {
+                    if (returnSlot < 9) {
+                        sendPacket(new UpdateSelectedSlotC2SPacket(returnSlot));
+                        mc.player.getInventory().selectedSlot = returnSlot;
+                        sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
+                        sendPacket(new UpdateSelectedSlotC2SPacket(mc.player.getInventory().selectedSlot));
+                    } else {
+                        mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, returnSlot, 40, SlotActionType.SWAP, mc.player);
+                        sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
+                    }
+                    bypassSwapped = false;
+                    oldOffhandItem = ItemStack.EMPTY;
+                    oldOffhandSlot = -1;
+                }
+            }
+        }
+    }
+
+    private int findTotemSlot() {
+        for (int i = 0; i < 36; i++) {
+            int slot = i < 9 ? i + 36 : i;
+            ItemStack stack = mc.player.getInventory().getStack(i);
+            if (stack.getItem() == Items.TOTEM_OF_UNDYING) {
+                return slot;
+            }
+        }
+        return -1;
+    }
+
+    private int findReturnSlot() {
+        if (oldOffhandSlot != -1) {
+            ItemStack stack = mc.player.getInventory().getStack(oldOffhandSlot < 9 ? oldOffhandSlot : oldOffhandSlot - 36);
+            if (stack.isEmpty()) return oldOffhandSlot;
+        }
+
+        for (int i = 0; i < 36; i++) {
+            int slot = i < 9 ? i + 36 : i;
+            ItemStack stack = mc.player.getInventory().getStack(i);
+            if (stack.getItem() == oldOffhandItem.getItem()) {
+                return slot;
+            }
+        }
+        return -1;
+    }
+
+    private boolean canSwap() {
+        float hp = getTriggerHealth();
+        if (hp <= healthF.getValue()) return true;
+        if (onElytra.getValue() && mc.player.isFallFlying()) return true;
+        if (onFall.getValue() && mc.player.fallDistance > 10) return true;
+
+        for (Entity entity : mc.world.getEntities()) {
+            if (entity == null || !entity.isAlive()) continue;
+            if (getPlayerPos().squaredDistanceTo(entity.getPos()) > 36) continue;
+
+            if (onCrystal.getValue() && entity instanceof EndCrystalEntity) {
+                if (hp - ExplosionUtility.getExplosionDamageWPredict(entity.getPos(), mc.player, PredictUtility.createBox(getPlayerPos(), mc.player), false) < 0.5)
+                    return true;
+            }
+            if (onTnt.getValue() && entity instanceof TntEntity) return true;
+            if (onMinecartTnt.getValue() && entity instanceof TntMinecartEntity) return true;
+            if (onCreeper.getValue() && entity instanceof CreeperEntity) return true;
+        }
+
+        return false;
     }
 
     @EventHandler
@@ -115,13 +211,11 @@ public final class AutoTotem extends Module {
                                     break;
                                 }
                             }
-
                             swapTo(slot);
                             debug("spawn switch");
                         }
                     }
                 }
-
 
         if (e.getPacket() instanceof BlockUpdateS2CPacket blockUpdate)
             if (blockUpdate.getState().getBlock() == Blocks.OBSIDIAN && onObsidianPlace.getValue())
@@ -173,7 +267,7 @@ public final class AutoTotem extends Module {
                         clickSlot(slot, nearestSlot, SlotActionType.SWAP);
                         sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
                     }
-                    case Matrix -> {
+                    case Matrix, Bypass -> {
                         if (ncpStrict.getValue())
                             sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.STOP_SPRINTING));
 
@@ -275,9 +369,7 @@ public final class AutoTotem extends Module {
                         prevItem = item;
                     }
             }
-
             case Crystal -> item = Items.END_CRYSTAL;
-
             case GApple -> {
                 if (crappleSpoof.getValue()) {
                     if (mc.player.hasStatusEffect(StatusEffects.ABSORPTION) && mc.player.getStatusEffect(StatusEffects.ABSORPTION).getAmplifier() > 2) {
@@ -298,7 +390,6 @@ public final class AutoTotem extends Module {
                         item = Items.ENCHANTED_GOLDEN_APPLE;
                 }
             }
-
             case Shield -> {
                 if (shield.found() || offHandItem == Items.SHIELD) {
                     if (getTriggerHealth() <= healthS.getValue()) {
@@ -319,7 +410,6 @@ public final class AutoTotem extends Module {
                     item = Items.GOLDEN_APPLE;
             }
         }
-
 
         if (getTriggerHealth() <= healthF.getValue() && (InventoryUtility.findItemInInventory(Items.TOTEM_OF_UNDYING).found() || offHandItem == Items.TOTEM_OF_UNDYING))
             item = Items.TOTEM_OF_UNDYING;
@@ -409,7 +499,6 @@ public final class AutoTotem extends Module {
         }
 
         if (item == mc.player.getMainHandStack().getItem() && mc.options.useKey.isPressed()) return -1;
-
 
         return itemSlot;
     }
