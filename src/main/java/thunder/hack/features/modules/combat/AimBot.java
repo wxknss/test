@@ -102,7 +102,7 @@ public final class AimBot extends Module {
                 return;
             }
 
-            PlayerEntity nearestTarget = Managers.COMBAT.getNearestTarget(5);
+            PlayerEntity nearestTarget = Managers.COMBAT.getNearestTarget(50);
             assistAcceleration += aimStrength.getValue() / 10000f;
 
             if (nearestTarget != null) {
@@ -258,7 +258,7 @@ public final class AimBot extends Module {
             if (!entity.isAlive()) continue;
             if (ModuleManager.antiBot.isEnabled() && AntiBot.bots.contains(entity)) continue;
 
-            float dist = mc.player.squaredDistanceTo(entity);
+            float dist = (float) mc.player.squaredDistanceTo(entity);
             if (dist < bestDistance) {
                 bestDistance = dist;
                 target = entity;
