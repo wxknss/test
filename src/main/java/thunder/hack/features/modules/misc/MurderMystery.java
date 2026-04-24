@@ -52,6 +52,14 @@ public class MurderMystery extends Module {
         }
 
         if (event.getPacket() instanceof EntityEquipmentUpdateS2CPacket packet) {
+            int entityId = readEntityId(packet);
+            if (entityId == -1) return;
+
+            Entity entity = mc.world.getEntityById(entityId);
+            if (!(entity instanceof PlayerEntity player)) return;
+            if (player == mc.player) return;
+            if (!player.isAlive()) return;
+
             for (var pair : packet.getEquipmentList()) {
                 if (pair.getFirst() != EquipmentSlot.MAINHAND) continue;
                 ItemStack held = pair.getSecond();
@@ -59,15 +67,15 @@ public class MurderMystery extends Module {
 
                 if (killerTracker.getValue()) {
                     if (server.getValue() == Server.Sword && held.getItem() instanceof SwordItem) {
-                        updateKiller(getPlayerName(packet));
+                        updateKiller(player.getName().getString());
                     } else if (server.getValue() == Server.FunnyGame && held.getItem() instanceof ShearsItem) {
-                        updateKiller(getPlayerName(packet));
+                        updateKiller(player.getName().getString());
                     }
                 }
 
                 if (detectiveTracker.getValue()) {
                     if (held.getItem() == Items.BOW) {
-                        String name = getPlayerName(packet);
+                        String name = player.getName().getString();
                         if (!name.equals(killerName)) {
                             updateDetective(name);
                         }
@@ -78,17 +86,20 @@ public class MurderMystery extends Module {
         }
     }
 
-    private String getPlayerName(EntityEquipmentUpdateS2CPacket packet) {
-        for (PlayerEntity player : mc.world.getPlayers()) {
-            if (player.getId() == packet.getEntityId()) {
-                return player.getName().getString();
-            }
+    private int readEntityId(EntityEquipmentUpdateS2CPacket packet) {
+        PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
+        try {
+            packet.write(buf);
+            return buf.readVarInt();
+        } catch (Exception ignored) {
+            return -1;
+        } finally {
+            buf.release();
         }
-        return null;
     }
 
     private void updateKiller(String name) {
-        if (name != null && !name.equals(killerName)) {
+        if (!name.equals(killerName)) {
             killerName = name;
             String word = language.getValue() == Language.RU ? "\u0443\u0431\u0438\u0439\u0446\u0430" : "is the murderer";
             String msg = "\u26A0 " + killerName + " " + word + " \u26A0";
@@ -98,7 +109,7 @@ public class MurderMystery extends Module {
     }
 
     private void updateDetective(String name) {
-        if (name != null && !name.equals(detectiveName)) {
+        if (!name.equals(detectiveName)) {
             detectiveName = name;
             String word = language.getValue() == Language.RU ? "\u0434\u0435\u0442\u0435\u043a\u0442\u0438\u0432" : "is the detective";
             String msg = "\u26A0 " + detectiveName + " " + word + " \u26A0";
