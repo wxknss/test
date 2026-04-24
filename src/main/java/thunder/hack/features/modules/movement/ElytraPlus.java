@@ -51,6 +51,12 @@ public class ElytraPlus extends Module {
     }
 
     public final Setting<Mode> mode = new Setting<>("Mode", Mode.Boost);
+    private final Setting<Integer> disablerDelay = new Setting<>("DisablerDelay", 1, 0, 10, v -> mode.is(Mode.SunriseOld));
+    private final Setting<Boolean> stopOnGround = new Setting<>("StopOnGround", false, v -> mode.is(Mode.Packet));
+    private final Setting<Boolean> infDurability = new Setting<>("InfDurability", true, v -> mode.is(Mode.Packet));
+    private final Setting<Boolean> vertical = new Setting<>("Vertical", false, v -> mode.is(Mode.Packet));
+    private final Setting<NCPStrict> ncpStrict = new Setting<>("NCPStrict", NCPStrict.Off, v -> mode.is(Mode.Packet));
+    private final Setting<AntiKick> antiKick = new Setting<>("AntiKick", AntiKick.Jitter, v -> mode.is(Mode.FireWork) || mode.is(Mode.SunriseOld));
     private final Setting<Float> xzSpeed = new Setting<>("XZSpeed", 1.55f, 0.1f, 10f, v -> !mode.is(Mode.Boost) && mode.getValue() != Mode.Pitch40Infinite);
     private final Setting<Float> ySpeed = new Setting<>("YSpeed", 0.47f, 0f, 2f, v -> mode.is(Mode.FireWork) || mode.getValue() == Mode.SunriseOld || (mode.is(Mode.Packet) && vertical.getValue()));
     private final Setting<Integer> fireSlot = new Setting<>("FireSlot", 1, 1, 9, v -> mode.is(Mode.FireWork));
@@ -97,8 +103,7 @@ public class ElytraPlus extends Module {
     private long lastFireworkTime;
 
     @Override public void onEnable() {
-        if (mc.player.getY() < 200 && mode.is(Mode.Pitch40Infinite))
-            disable("Go above 200 height!");
+        if (mc.player.getY() < 200 && mode.is(Mode.Pitch40Infinite)) disable("Go above 200 height!");
         flying = false; reset(); infiniteFlag = false; acceleration = 0; accelerationY = 0;
         if (mode.is(Mode.FireWork)) fireworkOnEnable();
     }
@@ -230,6 +235,10 @@ public class ElytraPlus extends Module {
         if (Math.abs(e.getX()) < 0.05) e.setX(0);
         if (Math.abs(e.getZ()) < 0.05) e.setZ(0);
         e.setY(vertical.getValue() ? mc.options.jumpKey.isPressed() ? ySpeed.getValue() : mc.options.sneakKey.isPressed() ? -ySpeed.getValue() : 0 : 0);
+    }
+
+    private boolean isBoxCollidingGround() {
+        return mc.world.getBlockCollisions(mc.player, mc.player.getBoundingBox().expand(-0.25, 0.0, -0.25).offset(0.0, -0.3, 0.0)).iterator().hasNext();
     }
 
     public void matrixDisabler(int elytra) {
