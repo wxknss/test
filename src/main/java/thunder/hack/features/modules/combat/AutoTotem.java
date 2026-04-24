@@ -40,7 +40,7 @@ import thunder.hack.utility.player.InventoryUtility;
 import thunder.hack.utility.player.SearchInvResult;
 
 public final class AutoTotem extends Module {
-    private final Setting<Mode> mode = new Setting<>("Mode", Mode.Matrix7_A);
+    private final Setting<Mode> mode = new Setting<>("Mode", Mode.Matrix);
     private final Setting<OffHand> offhand = new Setting<>("Item", OffHand.Totem);
     private final Setting<BooleanSettingGroup> bindSwap = new Setting<>("BindSwap", new BooleanSettingGroup(false), v -> offhand.is(OffHand.Totem));
     private final Setting<Bind> swapButton = new Setting<>("SwapButton", new Bind(GLFW.GLFW_KEY_CAPS_LOCK, false, false)).addToGroup(bindSwap);
@@ -66,27 +66,20 @@ public final class AutoTotem extends Module {
     public final Setting<RCGap> rcGap = new Setting<>("RightClickGapple", RCGap.Off);
     private final Setting<Boolean> crappleSpoof = new Setting<>("CrappleSpoof", true, v -> offhand.getValue() == OffHand.GApple);
 
-    // Новые настройки для Matrix 7
-    private final Setting<Boolean> syncWithPing = new Setting<>("SyncWithPing", true,
-            v -> mode.getValue() == Mode.Matrix7_A || mode.getValue() == Mode.Matrix7_B || mode.getValue() == Mode.Matrix7_C || mode.getValue() == Mode.Matrix7_D);
-    private final Setting<Integer> customDelay = new Setting<>("CustomDelay", 0, 0, 500,
-            v -> mode.getValue() == Mode.Matrix7_A || mode.getValue() == Mode.Matrix7_B || mode.getValue() == Mode.Matrix7_C || mode.getValue() == Mode.Matrix7_D);
-
     private enum OffHand {Totem, Crystal, GApple, Shield}
-    private enum Mode {
-        Default, Alternative, Matrix, MatrixPick, NewVersion,
-        Matrix7_A,   // Pick + swap без кликов
-        Matrix7_B,   // ClickSlot SWAP в один слот
-        Matrix7_C,   // Двухэтапный: pick → смена слота → swap
-        Matrix7_D    // Двойной своп с задержкой
-    }
+
+    private enum Mode {Default, Alternative, Matrix, MatrixPick, NewVersion}
+
     private enum Swap {GappleShield, BallShield, GappleBall, BallTotem}
+
     public enum RCGap {Off, Always, OnlySafe}
 
+
     private int delay;
+
     private Timer bindDelay = new Timer();
+
     private Item prevItem;
-    private int pendingTotemSlot = -1;
 
     public AutoTotem() {
         super("AutoTotem", Category.COMBAT);
@@ -155,176 +148,80 @@ public final class AutoTotem extends Module {
     }
 
     public void swapTo(int slot) {
-        if (slot == -1 || delay > 0) return;
-        if (mc.currentScreen instanceof GenericContainerScreen) return;
+        if (slot != -1 && delay <= 0) {
+            if (mc.currentScreen instanceof GenericContainerScreen) return;
 
-        if (stopMotion.getValue()) mc.player.setVelocity(0, mc.player.getVelocity().getY(), 0);
+            if (stopMotion.getValue()) mc.player.setVelocity(0, mc.player.getVelocity().getY(), 0);
 
-        int nearestSlot = findNearestCurrentItem();
-        int prevCurrentItem = mc.player.getInventory().selectedSlot;
-
-        // === Обработка режимов Matrix 7 ===
-        if (mode.getValue() == Mode.Matrix7_A || mode.getValue() == Mode.Matrix7_B ||
-                mode.getValue() == Mode.Matrix7_C || mode.getValue() == Mode.Matrix7_D) {
-
-            if (ncpStrict.getValue())
-                sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.STOP_SPRINTING));
-
-            // Если тотем в инвентаре (не в хотбаре)
+            int nearestSlot = findNearestCurrentItem();
+            int prevCurrentItem = mc.player.getInventory().selectedSlot;
             if (slot >= 9) {
                 switch (mode.getValue()) {
-                    case Matrix7_A -> {
-                        // Самый быстрый и безопасный: PickFromInventory + SwapOffhand
-                        sendPacket(new PickFromInventoryC2SPacket(slot));
-                        // Даём время серверу обработать pick (можно синхронизировать с пингом)
-                        applyDelay();
-                        sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
-                        // Возвращаем выделенный слот через асинхрон
-                        Managers.ASYNC.run(() -> {
-                            mc.player.getInventory().selectedSlot = prevCurrentItem;
-                            sendPacket(new UpdateSelectedSlotC2SPacket(prevCurrentItem));
-                        }, getDelayMs() * 2L);
+                    case Default -> {
+                        if (ncpStrict.getValue())
+                            sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.STOP_SPRINTING));
+                        clickSlot(slot);
+                        clickSlot(45);
+                        clickSlot(slot);
+                        sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
                     }
-                    case Matrix7_B -> {
-                        // SWAP через ClickSlot в один слот (не требует открытия инвентаря)
+                    case Alternative -> {
+                        if (ncpStrict.getValue())
+                            sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.STOP_SPRINTING));
+                        clickSlot(slot, nearestSlot, SlotActionType.SWAP);
+                        clickSlot(45, nearestSlot, SlotActionType.SWAP);
+                        clickSlot(slot, nearestSlot, SlotActionType.SWAP);
+                        sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
+                    }
+                    case Matrix -> {
+                        if (ncpStrict.getValue())
+                            sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.STOP_SPRINTING));
+
+                        mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot, nearestSlot, SlotActionType.SWAP, mc.player);
+                        debug(slot + " " + nearestSlot);
+
+                        sendPacket(new UpdateSelectedSlotC2SPacket(nearestSlot));
+                        mc.player.getInventory().selectedSlot = nearestSlot;
+
+                        ItemStack itemstack = mc.player.getOffHandStack();
+                        mc.player.setStackInHand(Hand.OFF_HAND, mc.player.getMainHandStack());
+                        mc.player.setStackInHand(Hand.MAIN_HAND, itemstack);
+                        sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
+
+                        sendPacket(new UpdateSelectedSlotC2SPacket(prevCurrentItem));
+                        mc.player.getInventory().selectedSlot = prevCurrentItem;
+
+                        mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot, nearestSlot, SlotActionType.SWAP, mc.player);
+
+                        sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
+                        if (resetAttackCooldown.getValue())
+                            mc.player.resetLastAttackedTicks();
+                    }
+                    case MatrixPick -> {
+                        debug(slot + " pick");
+                        sendPacket(new PickFromInventoryC2SPacket(slot));
+                        sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
+                        int prevSlot = mc.player.getInventory().selectedSlot;
+                        Managers.ASYNC.run(() -> mc.player.getInventory().selectedSlot = prevSlot, 300);
+                    }
+                    case NewVersion -> {
+                        debug(slot + " swap");
                         mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot, 40, SlotActionType.SWAP, mc.player);
                         sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
                     }
-                    case Matrix7_C -> {
-                        // Двухэтапный: сначала pick в хотбар, потом через тик свопаем
-                        if (pendingTotemSlot == -1) {
-                            // Первый этап: перемещаем в хотбар (например, в слот 8)
-                            int targetHotbarSlot = 8;
-                            mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot, targetHotbarSlot, SlotActionType.SWAP, mc.player);
-                            pendingTotemSlot = targetHotbarSlot;
-                            applyDelay();
-                        } else {
-                            // Второй этап: выбираем этот слот и свопаем в оффхенд
-                            sendPacket(new UpdateSelectedSlotC2SPacket(pendingTotemSlot));
-                            mc.player.getInventory().selectedSlot = pendingTotemSlot;
-                            sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
-                            // Возвращаем исходный слот
-                            Managers.ASYNC.run(() -> {
-                                mc.player.getInventory().selectedSlot = prevCurrentItem;
-                                sendPacket(new UpdateSelectedSlotC2SPacket(prevCurrentItem));
-                            }, getDelayMs() * 2L);
-                            pendingTotemSlot = -1;
-                        }
-                        sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
-                    }
-                    case Matrix7_D -> {
-                        // Двойной своп для обхода проверок на "невозможную скорость"
-                        sendPacket(new PickFromInventoryC2SPacket(slot));
-                        applyDelay();
-                        sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
-                        applyDelay(2); // чуть больше задержка
-                        sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
-                        Managers.ASYNC.run(() -> {
-                            mc.player.getInventory().selectedSlot = prevCurrentItem;
-                            sendPacket(new UpdateSelectedSlotC2SPacket(prevCurrentItem));
-                        }, getDelayMs() * 3L);
-                    }
                 }
-                if (resetAttackCooldown.getValue())
-                    mc.player.resetLastAttackedTicks();
-                delay = getBaseDelay();
-                return;
             } else {
-                // Тотем уже в хотбаре (slot < 9)
                 sendPacket(new UpdateSelectedSlotC2SPacket(slot));
                 mc.player.getInventory().selectedSlot = slot;
+                debug(slot + " select");
                 sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
                 sendPacket(new UpdateSelectedSlotC2SPacket(prevCurrentItem));
                 mc.player.getInventory().selectedSlot = prevCurrentItem;
                 if (resetAttackCooldown.getValue())
                     mc.player.resetLastAttackedTicks();
-                delay = getBaseDelay();
-                return;
             }
+            delay = (int) (2 + (Managers.SERVER.getPing() / 25f));
         }
-
-        // === Старые режимы (для совместимости) ===
-        if (slot >= 9) {
-            switch (mode.getValue()) {
-                case Default -> {
-                    if (ncpStrict.getValue())
-                        sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.STOP_SPRINTING));
-                    clickSlot(slot);
-                    clickSlot(45);
-                    clickSlot(slot);
-                    sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
-                }
-                case Alternative -> {
-                    if (ncpStrict.getValue())
-                        sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.STOP_SPRINTING));
-                    clickSlot(slot, nearestSlot, SlotActionType.SWAP);
-                    clickSlot(45, nearestSlot, SlotActionType.SWAP);
-                    clickSlot(slot, nearestSlot, SlotActionType.SWAP);
-                    sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
-                }
-                case Matrix -> {
-                    if (ncpStrict.getValue())
-                        sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.STOP_SPRINTING));
-
-                    mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot, nearestSlot, SlotActionType.SWAP, mc.player);
-                    sendPacket(new UpdateSelectedSlotC2SPacket(nearestSlot));
-                    mc.player.getInventory().selectedSlot = nearestSlot;
-
-                    ItemStack itemstack = mc.player.getOffHandStack();
-                    mc.player.setStackInHand(Hand.OFF_HAND, mc.player.getMainHandStack());
-                    mc.player.setStackInHand(Hand.MAIN_HAND, itemstack);
-                    sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
-
-                    sendPacket(new UpdateSelectedSlotC2SPacket(prevCurrentItem));
-                    mc.player.getInventory().selectedSlot = prevCurrentItem;
-
-                    mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot, nearestSlot, SlotActionType.SWAP, mc.player);
-
-                    sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
-                    if (resetAttackCooldown.getValue())
-                        mc.player.resetLastAttackedTicks();
-                }
-                case MatrixPick -> {
-                    sendPacket(new PickFromInventoryC2SPacket(slot));
-                    sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
-                    Managers.ASYNC.run(() -> mc.player.getInventory().selectedSlot = prevCurrentItem, 300);
-                }
-                case NewVersion -> {
-                    mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot, 40, SlotActionType.SWAP, mc.player);
-                    sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
-                }
-            }
-        } else {
-            sendPacket(new UpdateSelectedSlotC2SPacket(slot));
-            mc.player.getInventory().selectedSlot = slot;
-            sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ORIGIN, Direction.DOWN));
-            sendPacket(new UpdateSelectedSlotC2SPacket(prevCurrentItem));
-            mc.player.getInventory().selectedSlot = prevCurrentItem;
-            if (resetAttackCooldown.getValue())
-                mc.player.resetLastAttackedTicks();
-        }
-        delay = getBaseDelay();
-    }
-
-    private int getBaseDelay() {
-        if (!syncWithPing.getValue()) return 2;
-        return (int) (2 + (Managers.SERVER.getPing() / 30f));
-    }
-
-    private int getDelayMs() {
-        if (customDelay.getValue() > 0) return customDelay.getValue();
-        if (!syncWithPing.getValue()) return 50;
-        return (int) (50 + Managers.SERVER.getPing() / 2f);
-    }
-
-    private void applyDelay() {
-        applyDelay(1);
-    }
-
-    private void applyDelay(int multiplier) {
-        try {
-            Thread.sleep(getDelayMs() * multiplier);
-        } catch (InterruptedException ignored) {}
     }
 
     public static int findNearestCurrentItem() {
@@ -423,6 +320,7 @@ public final class AutoTotem extends Module {
             }
         }
 
+
         if (getTriggerHealth() <= healthF.getValue() && (InventoryUtility.findItemInInventory(Items.TOTEM_OF_UNDYING).found() || offHandItem == Items.TOTEM_OF_UNDYING))
             item = Items.TOTEM_OF_UNDYING;
 
@@ -511,6 +409,7 @@ public final class AutoTotem extends Module {
         }
 
         if (item == mc.player.getMainHandStack().getItem() && mc.options.useKey.isPressed()) return -1;
+
 
         return itemSlot;
     }
