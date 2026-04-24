@@ -1,5 +1,6 @@
 package thunder.hack.features.modules.misc;
 
+import io.netty.buffer.Unpooled;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
@@ -7,6 +8,7 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.item.ShearsItem;
 import net.minecraft.item.SwordItem;
+import net.minecraft.network.PacketByteBuf;
 import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
 import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
 import net.minecraft.network.packet.s2c.play.PlayerListS2CPacket;
@@ -200,10 +202,17 @@ public class MurderMystery extends Module {
     }
 
     private PlayerEntity getEntityFromPacket(PlayerInteractEntityC2SPacket packet) {
-        for (PlayerEntity player : mc.world.getPlayers()) {
-            if (player.getId() == packet.getEntityId()) {
-                return player;
+        PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
+        try {
+            packet.write(buf);
+            int entityId = buf.readVarInt();
+            Entity entity = mc.world.getEntityById(entityId);
+            if (entity instanceof PlayerEntity) {
+                return (PlayerEntity) entity;
             }
+        } catch (Exception ignored) {
+        } finally {
+            buf.release();
         }
         return null;
     }
