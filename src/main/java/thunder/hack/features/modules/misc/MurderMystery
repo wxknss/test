@@ -34,13 +34,11 @@ public class MurderMystery extends Module {
 
     private String killerName = null;
     private String detectiveName = null;
-    private boolean silentSwapActive = false;
 
     @EventHandler
     public void onWorldChange(WorldChangeEvent event) {
         killerName = null;
         detectiveName = null;
-        silentSwapActive = false;
     }
 
     @Override
@@ -84,10 +82,10 @@ public class MurderMystery extends Module {
 
             int weaponSlot = findWeaponSlot();
             if (weaponSlot == -1) return;
-            if (mc.player.getInventory().selectedSlot == weaponSlot) return;
+
+            if (isWeapon(mc.player.getInventory().getStack(mc.player.getInventory().selectedSlot))) return;
 
             int currentSlot = mc.player.getInventory().selectedSlot;
-            silentSwapActive = true;
 
             mc.player.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(weaponSlot));
             mc.player.getInventory().selectedSlot = weaponSlot;
@@ -99,9 +97,20 @@ public class MurderMystery extends Module {
                 }
                 mc.player.networkHandler.sendPacket(new UpdateSelectedSlotC2SPacket(currentSlot));
                 mc.player.getInventory().selectedSlot = currentSlot;
-                silentSwapActive = false;
             });
         }
+    }
+
+    private boolean isWeapon(ItemStack stack) {
+        if (stack.isEmpty()) return false;
+
+        switch (server.getValue()) {
+            case Hypixel:
+                return stack.getItem() instanceof SwordItem;
+            case FunnyGame:
+                return stack.getItem() instanceof ShearsItem;
+        }
+        return false;
     }
 
     private String findMurder() {
