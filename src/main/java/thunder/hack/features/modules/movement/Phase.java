@@ -28,7 +28,7 @@ public class Phase extends Module {
         super("Phase", Category.MOVEMENT);
     }
 
-    private final Setting<Mode> mode = new Setting<>("Mode", Mode.Vanilla);
+    private final Setting<Mode> mode = new Setting<>("Mode", Mode.ForceMine);
     private final Setting<Boolean> silent = new Setting<>("Silent", false, v -> mode.getValue() == Mode.Sunrise);
     private final Setting<Boolean> waitBreak = new Setting<>("WaitBreak", true, v -> mode.getValue() == Mode.Sunrise);
     private final Setting<Boolean> onlyOnGround = new Setting<>("OnlyOnGround", false, v -> mode.is(Mode.Pearl));
@@ -37,6 +37,7 @@ public class Phase extends Module {
     private final Setting<Integer> afterPearl = new Setting<>("PearlTimeout", 0, 0, 60, v -> mode.getValue() == Mode.Pearl);
     private final Setting<Float> pitch = new Setting<>("Pitch", 80f, 0f, 90f, v -> mode.getValue() == Mode.Pearl);
     private final Setting<Boolean> strict = new Setting<>("Strict", false, v -> mode.is(Mode.ForceMine));
+    private final Setting<Float> range = new Setting<>("Range", 2.0f, 1.0f, 3.0f, v -> mode.is(Mode.ForceMine));
 
     public int clipTimer;
     public int afterPearlTime;
@@ -149,19 +150,28 @@ public class Phase extends Module {
                 InventoryUtility.switchTo(prevItem);
         }
 
-        if (mode.getValue() == Mode.ForceMine && (mc.player.horizontalCollision || playerInsideBlock()) && !mc.player.isSubmergedInWater() && !mc.player.isInLava())
-            for (int x = -2; x < 2; x++)
-                for (int y = -1; y < 3; y++)
-                    for (int z = -2; z < 2; z++) {
-                        if (((x == 0 && y == 0 && z == 0) || (x == 0 && y == 1 && z == 0)) && !mc.options.sneakKey.isPressed())
-                            continue;
+        if (mode.getValue() == Mode.ForceMine && (mc.player.horizontalCollision || playerInsideBlock()) && !mc.player.isSubmergedInWater() && !mc.player.isInLava()) {
+            double[] dir = MovementUtility.forward(range.getValue());
+            BlockPos targetBlock = BlockPos.ofFloored(mc.player.getX() + dir[0], mc.player.getY() + 0.5, mc.player.getZ() + dir[1]);
 
+            if (strict.getValue() && Math.abs(dir[0]) > 0 && Math.abs(dir[1]) > 0) return;
+
+            if (!mc.world.isAir(targetBlock)) {
+                sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.START_DESTROY_BLOCK, targetBlock, Direction.UP));
+                sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.STOP_DESTROY_BLOCK, targetBlock, Direction.UP));
+            }
+
+            for (int x = -1; x <= 1; x++) {
+                for (int y = -1; y <= 2; y++) {
+                    for (int z = -1; z <= 1; z++) {
                         BlockPos bp = BlockPos.ofFloored(mc.player.getPos()).add(x, y, z);
-                        if (mc.player.getBoundingBox().intersects(new Box(bp)) && !mc.world.isAir(bp))
+                        if (!mc.world.isAir(bp) && mc.player.getBoundingBox().expand(0.1).intersects(new Box(bp))) {
                             sendPacket(new PlayerActionC2SPacket(PlayerActionC2SPacket.Action.STOP_DESTROY_BLOCK, bp, Direction.UP));
+                        }
                     }
-
-
+                }
+            }
+        }
 
         if (mode.getValue() == Mode.Pearl && (mc.player.isOnGround() || !onlyOnGround.getValue())) {
             if (mc.player.horizontalCollision && !playerInsideBlock() && clipTimer <= 0 && mc.player.age > 60) {
