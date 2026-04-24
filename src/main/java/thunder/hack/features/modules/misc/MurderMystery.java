@@ -1,6 +1,7 @@
 package thunder.hack.features.modules.misc;
 
 import meteordevelopment.orbit.EventHandler;
+import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
@@ -199,10 +200,9 @@ public class MurderMystery extends Module {
     }
 
     private PlayerEntity getEntityFromPacket(PlayerInteractEntityC2SPacket packet) {
-        for (PlayerEntity player : mc.world.getPlayers()) {
-            if (player.getId() == packet.getEntityId()) {
-                return player;
-            }
+        Entity entity = mc.world.getEntityById(((net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacketAccessor) packet).getEntityId());
+        if (entity instanceof PlayerEntity) {
+            return (PlayerEntity) entity;
         }
         return null;
     }
