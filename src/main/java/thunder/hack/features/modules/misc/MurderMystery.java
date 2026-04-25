@@ -26,6 +26,9 @@ import thunder.hack.events.impl.PacketEvent;
 import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
 
+import java.util.HashSet;
+import java.util.Set;
+
 public class MurderMystery extends Module {
     public MurderMystery() {
         super("MurderMystery", Category.MISC);
@@ -45,18 +48,18 @@ public class MurderMystery extends Module {
     private enum Language { RU, EN }
 
     private String killerName = null;
-    private String detectiveName = null;
+    private final Set<String> detectiveNames = new HashSet<>();
 
     @Override
     public void onEnable() {
         killerName = null;
-        detectiveName = null;
+        detectiveNames.clear();
     }
 
     @Override
     public void onDisable() {
         killerName = null;
-        detectiveName = null;
+        detectiveNames.clear();
     }
 
     @EventHandler
@@ -65,7 +68,7 @@ public class MurderMystery extends Module {
 
         if (event.getPacket() instanceof PlayerListS2CPacket) {
             killerName = null;
-            detectiveName = null;
+            detectiveNames.clear();
             return;
         }
 
@@ -111,10 +114,9 @@ public class MurderMystery extends Module {
     }
 
     private void updateDetective(String name) {
-        if (name != null && !name.equals(detectiveName)) {
-            detectiveName = name;
+        if (name != null && detectiveNames.add(name)) {
             String word = language.getValue() == Language.RU ? "\u0434\u0435\u0442\u0435\u043a\u0442\u0438\u0432" : "is the detective";
-            String msg = "\u26A0 " + detectiveName + " " + word + " \u26A0";
+            String msg = "\u26A0 " + name + " " + word + " \u26A0";
             displayNotification(msg, 0x00AAAA);
         }
     }
@@ -201,5 +203,5 @@ public class MurderMystery extends Module {
     }
 
     public String getKillerName() { return killerName; }
-    public String getDetectiveName() { return detectiveName; }
+    public String getDetectiveName() { return detectiveNames.isEmpty() ? null : detectiveNames.iterator().next(); }
 }
