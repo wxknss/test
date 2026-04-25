@@ -125,6 +125,16 @@ public class NameTags extends Module {
 
             String final_string = "";
 
+            // MurderMystery colors
+            if (ModuleManager.murderMystery != null && ModuleManager.murderMystery.isEnabled() && ModuleManager.murderMystery.nameTagColors.getValue()) {
+                String playerName = ent.getName().getString();
+                if (playerName.equals(ModuleManager.murderMystery.getKillerName())) {
+                    final_string += "§#FF0000";
+                } else if (playerName.equals(ModuleManager.murderMystery.getDetectiveName())) {
+                    final_string += "§3";
+                }
+            }
+
             if (ping.getValue()) final_string += getPingColor(getEntityPing(ent)) + getEntityPing(ent) + "ms " + Formatting.WHITE;
             if (gamemode.getValue()) final_string += translateGamemode(getEntityGamemode(ent)) + " ";
 
