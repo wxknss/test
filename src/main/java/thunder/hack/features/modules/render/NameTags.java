@@ -125,11 +125,10 @@ public class NameTags extends Module {
 
             String final_string = "";
 
-            // MurderMystery colors
             if (ModuleManager.murderMystery != null && ModuleManager.murderMystery.isEnabled() && ModuleManager.murderMystery.NameColors.getValue()) {
                 String playerName = ent.getName().getString();
                 if (playerName.equals(ModuleManager.murderMystery.getKillerName())) {
-                    final_string += "§#FF0000";
+                    final_string += "§c";
                 } else if (playerName.equals(ModuleManager.murderMystery.getDetectiveName())) {
                     final_string += "§3";
                 }
