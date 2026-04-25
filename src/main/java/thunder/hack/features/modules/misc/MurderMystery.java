@@ -21,10 +21,10 @@ import net.minecraft.text.Text;
 import net.minecraft.text.TextColor;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Hand;
-import thunder.hack.core.Managers;
 import thunder.hack.events.impl.PacketEvent;
 import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
+import thunder.hack.utility.Timer;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -49,11 +49,13 @@ public class MurderMystery extends Module {
 
     private String killerName = null;
     private final Set<String> detectiveNames = new HashSet<>();
+    private final Timer chatTimer = new Timer();
 
     @Override
     public void onEnable() {
         killerName = null;
         detectiveNames.clear();
+        chatTimer.reset();
     }
 
     @Override
@@ -69,6 +71,7 @@ public class MurderMystery extends Module {
         if (event.getPacket() instanceof PlayerListS2CPacket) {
             killerName = null;
             detectiveNames.clear();
+            chatTimer.reset();
             return;
         }
 
@@ -78,25 +81,28 @@ public class MurderMystery extends Module {
                 Item heldItem = pair.getSecond().getItem();
                 if (heldItem == Items.AIR) continue;
 
+                PlayerEntity targetPlayer = null;
                 for (PlayerEntity player : mc.world.getPlayers()) {
                     if (player == mc.player) continue;
                     if (!player.isAlive()) continue;
-
-                    if (killerTracker.getValue()) {
-                        if (server.getValue() == Server.Sword && heldItem instanceof SwordItem) {
-                            updateKiller(player.getName().getString());
-                        } else if (server.getValue() == Server.FunnyGame && heldItem instanceof ShearsItem) {
-                            updateKiller(player.getName().getString());
-                        }
+                    if (player.getMainHandStack().getItem() == heldItem) {
+                        targetPlayer = player;
+                        break;
                     }
+                }
+                if (targetPlayer == null) continue;
 
-                    if (detectiveTracker.getValue()) {
-                        if (heldItem == Items.BOW) {
-                            String name = player.getName().getString();
-                            if (!name.equals(killerName)) {
-                                updateDetective(name);
-                            }
-                        }
+                String name = targetPlayer.getName().getString();
+
+                if (killerTracker.getValue()) {
+                    if (heldItem instanceof ShearsItem || heldItem instanceof SwordItem) {
+                        updateKiller(name);
+                    }
+                }
+
+                if (detectiveTracker.getValue()) {
+                    if (heldItem == Items.BOW && !name.equals(killerName)) {
+                        updateDetective(name);
                     }
                 }
             }
@@ -109,7 +115,10 @@ public class MurderMystery extends Module {
             String word = language.getValue() == Language.RU ? "\u0443\u0431\u0438\u0439\u0446\u0430" : "is the murderer";
             String msg = "\u26A0 " + killerName + " " + word + " \u26A0";
             displayNotification(msg, 0xFF0000);
-            if (publicChat.getValue()) sendPublicMessage(killerName + " " + word);
+            if (publicChat.getValue() && chatTimer.passedMs(5100)) {
+                sendPublicMessage(killerName + " " + word);
+                chatTimer.reset();
+            }
         }
     }
 
@@ -135,22 +144,16 @@ public class MurderMystery extends Module {
             if (weaponSlot == -1) return;
             if (isWeapon(mc.player.getInventory().getStack(mc.player.getInventory().selectedSlot))) return;
 
-            int currentSlot = mc.player.getInventory().selectedSlot;
             event.cancel();
 
             sendPacket(new UpdateSelectedSlotC2SPacket(weaponSlot));
-            mc.player.getInventory().selectedSlot = weaponSlot;
+            sendPacket(PlayerInteractEntityC2SPacket.attack(target, false));
 
-            if (noSwing.getValue()) {
+            if (!noSwing.getValue()) {
                 sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
             }
 
-            Managers.ASYNC.run(() -> {
-                try { Thread.sleep(50); } catch (InterruptedException ignored) {}
-                sendPacket(PlayerInteractEntityC2SPacket.attack(target, false));
-                sendPacket(new UpdateSelectedSlotC2SPacket(currentSlot));
-                mc.player.getInventory().selectedSlot = currentSlot;
-            });
+            sendPacket(new UpdateSelectedSlotC2SPacket(mc.player.getInventory().selectedSlot));
         }
     }
 
@@ -166,11 +169,7 @@ public class MurderMystery extends Module {
         for (int i = 0; i < 9; i++) {
             ItemStack stack = mc.player.getInventory().getStack(i);
             if (stack.isEmpty()) continue;
-            boolean found = switch (server.getValue()) {
-                case Sword -> stack.getItem() instanceof SwordItem;
-                case FunnyGame -> stack.getItem() instanceof ShearsItem;
-            };
-            if (found) return i;
+            if (isWeapon(stack)) return i;
         }
         return -1;
     }
