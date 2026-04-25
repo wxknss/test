@@ -50,6 +50,7 @@ public class ServerHelper extends Module {
     private final Setting<Boolean> photomath = new Setting<>("PhotoMath", false);
     private final Setting<Boolean> antiTpHere = new Setting<>("AntiTpHere", false);
     private final Setting<Mode> antiTpMode = new Setting<>("AntiTpMode", Mode.Back, v -> antiTpHere.getValue());
+    private final Setting<Boolean> instantTp = new Setting<>("InstantTp", false, v -> antiTpHere.getValue());
     private final Setting<Boolean> clanInvite = new Setting<>("ClanInvite", false);
     private final Setting<Integer> clanInviteDelay = new Setting<>("InviteDelay", 10, 1, 30, v -> clanInvite.getValue());
     private final Setting<Boolean> fixAll = new Setting<>("/fix all", true);
@@ -124,7 +125,9 @@ public class ServerHelper extends Module {
 
     @Override
     public void onUpdate() {
-        if (flag && atphtimer.passedMs(100) && antiTpHere.getValue()) {
+        int delay = instantTp.getValue() ? 10 : 100;
+
+        if (flag && atphtimer.passedMs(delay) && antiTpHere.getValue()) {
             StringBuilder log = new StringBuilder("Тебя телепортировали в X: " + (int) mc.player.getX() + " Z: " + (int) mc.player.getZ() + ". Ближайшие игроки : ");
 
             for (PlayerEntity entity : mc.world.getPlayers()) {
