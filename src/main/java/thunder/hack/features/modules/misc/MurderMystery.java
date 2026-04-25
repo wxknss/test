@@ -47,6 +47,18 @@ public class MurderMystery extends Module {
     private String killerName = null;
     private String detectiveName = null;
 
+    @Override
+    public void onEnable() {
+        killerName = null;
+        detectiveName = null;
+    }
+
+    @Override
+    public void onDisable() {
+        killerName = null;
+        detectiveName = null;
+    }
+
     @EventHandler
     public void onPacketReceive(PacketEvent.Receive event) {
         if (fullNullCheck()) return;
@@ -58,41 +70,34 @@ public class MurderMystery extends Module {
         }
 
         if (event.getPacket() instanceof EntityEquipmentUpdateS2CPacket packet) {
-            PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
-            try {
-                packet.write(buf);
-                int entityId = buf.readVarInt();
-                Entity entity = mc.world.getEntityById(entityId);
-                if (!(entity instanceof PlayerEntity player)) return;
-                if (player == mc.player) return;
-                if (!player.isAlive()) return;
+            int entityId = packet.getEntityId();
+            Entity entity = mc.world.getEntityById(entityId);
+            if (!(entity instanceof PlayerEntity player)) return;
+            if (player == mc.player) return;
+            if (!player.isAlive()) return;
 
-                for (var pair : packet.getEquipmentList()) {
-                    if (pair.getFirst() != EquipmentSlot.MAINHAND) continue;
-                    Item heldItem = pair.getSecond().getItem();
-                    if (heldItem == Items.AIR) continue;
+            for (var pair : packet.getEquipmentList()) {
+                if (pair.getFirst() != EquipmentSlot.MAINHAND) continue;
+                Item heldItem = pair.getSecond().getItem();
+                if (heldItem == Items.AIR) continue;
 
-                    if (killerTracker.getValue()) {
-                        if (server.getValue() == Server.Sword && heldItem instanceof SwordItem) {
-                            updateKiller(player.getName().getString());
-                        } else if (server.getValue() == Server.FunnyGame && heldItem instanceof ShearsItem) {
-                            updateKiller(player.getName().getString());
-                        }
+                if (killerTracker.getValue()) {
+                    if (server.getValue() == Server.Sword && heldItem instanceof SwordItem) {
+                        updateKiller(player.getName().getString());
+                    } else if (server.getValue() == Server.FunnyGame && heldItem instanceof ShearsItem) {
+                        updateKiller(player.getName().getString());
                     }
-
-                    if (detectiveTracker.getValue()) {
-                        if (heldItem == Items.BOW) {
-                            String name = player.getName().getString();
-                            if (!name.equals(killerName)) {
-                                updateDetective(name);
-                            }
-                        }
-                    }
-                    break;
                 }
-            } catch (Exception ignored) {
-            } finally {
-                buf.release();
+
+                if (detectiveTracker.getValue()) {
+                    if (heldItem == Items.BOW) {
+                        String name = player.getName().getString();
+                        if (!name.equals(killerName)) {
+                            updateDetective(name);
+                        }
+                    }
+                }
+                break;
             }
         }
     }
@@ -114,22 +119,6 @@ public class MurderMystery extends Module {
             String msg = "\u26A0 " + detectiveName + " " + word + " \u26A0";
             displayNotification(msg, 0x00AAAA);
         }
-    }
-
-    @Override
-    public void onEnable() {
-        killerName = null;
-        detectiveName = null;
-    }
-
-    @Override
-    public void onDisable() {
-        killerName = null;
-        detectiveName = null;
-    }
-
-    @Override
-    public void onUpdate() {
     }
 
     @EventHandler
