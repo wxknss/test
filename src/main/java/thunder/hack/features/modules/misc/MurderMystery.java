@@ -50,6 +50,7 @@ public class MurderMystery extends Module {
     private String killerName = null;
     private final Set<String> detectiveNames = new HashSet<>();
     private final Timer chatTimer = new Timer();
+    private boolean sending = false;
 
     @Override
     public void onEnable() {
@@ -81,28 +82,25 @@ public class MurderMystery extends Module {
                 Item heldItem = pair.getSecond().getItem();
                 if (heldItem == Items.AIR) continue;
 
-                PlayerEntity targetPlayer = null;
                 for (PlayerEntity player : mc.world.getPlayers()) {
                     if (player == mc.player) continue;
                     if (!player.isAlive()) continue;
-                    if (player.getMainHandStack().getItem() == heldItem) {
-                        targetPlayer = player;
-                        break;
+                    if (player.getUuid().version() != 3) continue;
+                    if (player.getName().getString().contains("-")) continue;
+                    if (player.getMainHandStack().getItem() != heldItem) continue;
+
+                    String name = player.getName().getString();
+
+                    if (killerTracker.getValue()) {
+                        if (heldItem instanceof ShearsItem || heldItem instanceof SwordItem) {
+                            updateKiller(name);
+                        }
                     }
-                }
-                if (targetPlayer == null) continue;
 
-                String name = targetPlayer.getName().getString();
-
-                if (killerTracker.getValue()) {
-                    if (heldItem instanceof ShearsItem || heldItem instanceof SwordItem) {
-                        updateKiller(name);
-                    }
-                }
-
-                if (detectiveTracker.getValue()) {
-                    if (heldItem == Items.BOW && !name.equals(killerName)) {
-                        updateDetective(name);
+                    if (detectiveTracker.getValue()) {
+                        if (heldItem == Items.BOW && !name.equals(killerName)) {
+                            updateDetective(name);
+                        }
                     }
                 }
             }
@@ -112,11 +110,11 @@ public class MurderMystery extends Module {
     private void updateKiller(String name) {
         if (name != null && !name.equals(killerName)) {
             killerName = name;
-            String word = language.getValue() == Language.RU ? "\u0443\u0431\u0438\u0439\u0446\u0430" : "is the murderer";
-            String msg = "\u26A0 " + killerName + " " + word + " \u26A0";
-            displayNotification(msg, 0xFF0000);
+            String word = language.getValue() == Language.RU ? "убийца" : "is the murderer";
+            String msg = "§c⚠ §f" + killerName + " §c" + word + " §c⚠";
+            displayNotification(msg, -1);
             if (publicChat.getValue() && chatTimer.passedMs(5100)) {
-                sendPublicMessage(killerName + " " + word);
+                sendPublicMessage("⚠ " + killerName + " " + word + " ⚠");
                 chatTimer.reset();
             }
         }
@@ -124,9 +122,9 @@ public class MurderMystery extends Module {
 
     private void updateDetective(String name) {
         if (name != null && detectiveNames.add(name)) {
-            String word = language.getValue() == Language.RU ? "\u0434\u0435\u0442\u0435\u043a\u0442\u0438\u0432" : "is the detective";
-            String msg = "\u26A0 " + name + " " + word + " \u26A0";
-            displayNotification(msg, 0x00AAAA);
+            String word = language.getValue() == Language.RU ? "детектив" : "is the detective";
+            String msg = "§3⚠ §f" + name + " §3" + word + " §3⚠";
+            displayNotification(msg, -1);
         }
     }
 
@@ -134,6 +132,7 @@ public class MurderMystery extends Module {
     public void onPacketSend(PacketEvent.Send event) {
         if (fullNullCheck()) return;
         if (!silentSwap.getValue()) return;
+        if (sending) return;
 
         if (event.getPacket() instanceof PlayerInteractEntityC2SPacket packet) {
             PlayerEntity target = getEntityFromPacket(packet);
@@ -144,6 +143,7 @@ public class MurderMystery extends Module {
             if (weaponSlot == -1) return;
             if (isWeapon(mc.player.getInventory().getStack(mc.player.getInventory().selectedSlot))) return;
 
+            sending = true;
             event.cancel();
 
             sendPacket(new UpdateSelectedSlotC2SPacket(weaponSlot));
@@ -154,8 +154,10 @@ public class MurderMystery extends Module {
             }
 
             sendPacket(new UpdateSelectedSlotC2SPacket(mc.player.getInventory().selectedSlot));
+            sending = false;
         }
     }
+
 
     private boolean isWeapon(ItemStack stack) {
         if (stack.isEmpty()) return false;
@@ -169,7 +171,11 @@ public class MurderMystery extends Module {
         for (int i = 0; i < 9; i++) {
             ItemStack stack = mc.player.getInventory().getStack(i);
             if (stack.isEmpty()) continue;
-            if (isWeapon(stack)) return i;
+            boolean found = switch (server.getValue()) {
+                case Sword -> stack.getItem() instanceof SwordItem;
+                case FunnyGame -> stack.getItem() instanceof ShearsItem;
+            };
+            if (found) return i;
         }
         return -1;
     }
@@ -177,8 +183,13 @@ public class MurderMystery extends Module {
     private void displayNotification(String message, int color) {
         if (fullNullCheck()) return;
         String prefix = "\u230a" + Formatting.GOLD + "\u26a1" + Formatting.RESET + "\u230b";
-        Style style = Style.EMPTY.withColor(TextColor.fromRgb(color));
-        Text coloredMessage = Text.literal(prefix + " ").append(Text.literal(message).setStyle(style));
+        Text coloredMessage;
+        if (color == -1) {
+            coloredMessage = Text.literal(prefix + " ").append(Text.literal(message));
+        } else {
+            Style style = Style.EMPTY.withColor(TextColor.fromRgb(color));
+            coloredMessage = Text.literal(prefix + " ").append(Text.literal(message).setStyle(style));
+        }
         mc.player.sendMessage(coloredMessage, false);
     }
 
