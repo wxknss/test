@@ -49,6 +49,8 @@ public class Scaffold extends Module {
     private final Setting<Integer> renderLineWidth = new Setting<>("RenderLineWidth", 2, 1, 5).addToGroup(renderCategory);
     private final Setting<Integer> matrixDelay = new Setting<>("MatrixDelay", 3, 1, 10, v -> mode.is(Mode.Matrix));
     private final Setting<Integer> legitDelay = new Setting<>("LegitDelay", 5, 1, 20, v -> mode.is(Mode.Legit));
+    private final Setting<Float> matrixPitch = new Setting<>("MatrixPitch", 72f, 45f, 90f, v -> mode.is(Mode.Matrix));
+    private final Setting<Float> legitPitch = new Setting<>("LegitPitch", 85f, 45f, 90f, v -> mode.is(Mode.Legit));
 
     private enum Mode { NCP, StrictNCP, Grim, Matrix, Legit }
     private enum Switch { Normal, Silent, Inventory, None }
@@ -120,8 +122,13 @@ public class Scaffold extends Module {
         if (currentblock != null) {
             float[] rots = InteractionUtility.calculateAngle(currentblock.position().toCenterPos());
             rotationYaw = rots[0]; rotationPitch = rots[1];
-            if (mode.is(Mode.Matrix)) { rotationYaw = mc.player.getYaw() + 180f; rotationPitch = 72f; }
-            else if (mode.is(Mode.Legit)) rotationPitch = 85f;
+
+            if (mode.is(Mode.Matrix)) {
+                rotationYaw = mc.player.getYaw() + 180f;
+                rotationPitch = matrixPitch.getValue();
+            } else if (mode.is(Mode.Legit)) {
+                rotationPitch = legitPitch.getValue();
+            }
 
             if (rotate.getValue() && !mode.is(Mode.Grim) && !mode.is(Mode.Matrix) && !mode.is(Mode.Legit)) {
                 mc.player.setYaw(rotationYaw); mc.player.setPitch(rotationPitch);
@@ -158,6 +165,60 @@ public class Scaffold extends Module {
         }
     }
 
-    // Вспомогательные методы (checkNearBlocksExtended, prePlace, postPlace, isOffsetBBEmpty) остаются без изменений
-    // Скопируй их из предыдущей версии, они не менялись
+    private BlockPosWithFacing checkNearBlocksExtended(BlockPos blockPos) {
+        BlockPosWithFacing ret = null;
+        ret = checkNearBlocks(blockPos); if (ret != null) return ret;
+        ret = checkNearBlocks(blockPos.add(-1, 0, 0)); if (ret != null) return ret;
+        ret = checkNearBlocks(blockPos.add(1, 0, 0)); if (ret != null) return ret;
+        ret = checkNearBlocks(blockPos.add(0, 0, 1)); if (ret != null) return ret;
+        ret = checkNearBlocks(blockPos.add(0, 0, -1)); if (ret != null) return ret;
+        ret = checkNearBlocks(blockPos.add(-2, 0, 0)); if (ret != null) return ret;
+        ret = checkNearBlocks(blockPos.add(2, 0, 0)); if (ret != null) return ret;
+        ret = checkNearBlocks(blockPos.add(0, 0, 2)); if (ret != null) return ret;
+        ret = checkNearBlocks(blockPos.add(0, 0, -2)); if (ret != null) return ret;
+        ret = checkNearBlocks(blockPos.add(0, -1, 0)); if (ret != null) return ret;
+        ret = checkNearBlocks(blockPos.add(1, -1, 0)); if (ret != null) return ret;
+        ret = checkNearBlocks(blockPos.add(-1, -1, 0)); if (ret != null) return ret;
+        ret = checkNearBlocks(blockPos.add(0, -1, 1)); if (ret != null) return ret;
+        return checkNearBlocks(blockPos.add(0, -1, -1));
+    }
+
+    private int prePlace(boolean swap) {
+        if (mc.player == null || mc.world == null || mc.interactionManager == null) return -1;
+        if (mc.player.getOffHandStack().getItem() instanceof BlockItem bi && !bi.getBlock().getDefaultState().isReplaceable()) return -2;
+        if (mc.player.getMainHandStack().getItem() instanceof BlockItem bi && !bi.getBlock().getDefaultState().isReplaceable()) return mc.player.getInventory().selectedSlot;
+
+        int prevSlot = mc.player.getInventory().selectedSlot;
+        SearchInvResult hotbarResult = InventoryUtility.findInHotBar(i -> i.getItem() instanceof BlockItem bi && !bi.getBlock().getDefaultState().isReplaceable());
+        SearchInvResult invResult = InventoryUtility.findInInventory(i -> i.getItem() instanceof BlockItem bi && !bi.getBlock().getDefaultState().isReplaceable());
+
+        if (swap) {
+            switch (autoSwitch.getValue()) {
+                case Inventory -> {
+                    if (invResult.found()) {
+                        prevSlot = invResult.slot();
+                        mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, prevSlot, mc.player.getInventory().selectedSlot, SlotActionType.SWAP, mc.player);
+                        sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
+                    }
+                }
+                case Normal, Silent -> hotbarResult.switchTo();
+            }
+        }
+        return prevSlot;
+    }
+
+    private void postPlace(int prevSlot) {
+        if (prevSlot == -1 || prevSlot == -2) return;
+        switch (autoSwitch.getValue()) {
+            case Inventory -> {
+                mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, prevSlot, mc.player.getInventory().selectedSlot, SlotActionType.SWAP, mc.player);
+                sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
+            }
+            case Silent -> InventoryUtility.switchTo(prevSlot);
+        }
+    }
+
+    private boolean isOffsetBBEmpty(double x, double z) {
+        return !mc.world.getBlockCollisions(mc.player, mc.player.getBoundingBox().expand(-0.1, 0, -0.1).offset(x, -2, z)).iterator().hasNext();
+    }
 }
