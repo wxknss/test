@@ -1,6 +1,8 @@
 package thunder.hack.features.modules.misc;
 
+import io.netty.buffer.Unpooled;
 import meteordevelopment.orbit.EventHandler;
+import net.minecraft.entity.Entity;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.Item;
@@ -8,6 +10,7 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.item.ShearsItem;
 import net.minecraft.item.SwordItem;
+import net.minecraft.network.PacketByteBuf;
 import net.minecraft.network.packet.c2s.play.HandSwingC2SPacket;
 import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
 import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
@@ -32,7 +35,7 @@ public class MurderMystery extends Module {
     private final Setting<Boolean> detectiveTracker = new Setting<>("DetectiveTracker", false);
     private final Setting<Server> server = new Setting<>("Server", Server.FunnyGame);
     private final Setting<Boolean> publicChat = new Setting<>("PublicChat", false);
-    private final Setting<Boolean> nameTagColors = new Setting<>("NameColors", true);
+    public final Setting<Boolean> NameColors = new Setting<>("NameColors", true);
     private final Setting<Language> language = new Setting<>("Language", Language.RU);
     private final Setting<Boolean> silentSwap = new Setting<>("SilentSwap", false);
     private final Setting<Float> swapRange = new Setting<>("SwapRange", 3.0f, 3.0f, 6.0f, v -> silentSwap.getValue());
@@ -150,10 +153,10 @@ public class MurderMystery extends Module {
                 sendPacket(PlayerInteractEntityC2SPacket.attack(target, false));
                 sendPacket(new UpdateSelectedSlotC2SPacket(currentSlot));
                 mc.player.getInventory().selectedSlot = currentSlot;
-                mc.player.getInventory().selectedSlot = currentSlot;
             });
         }
     }
+
 
     private boolean isWeapon(ItemStack stack) {
         if (stack.isEmpty()) return false;
@@ -190,10 +193,15 @@ public class MurderMystery extends Module {
     }
 
     private PlayerEntity getEntityFromPacket(PlayerInteractEntityC2SPacket packet) {
-        for (PlayerEntity player : mc.world.getPlayers()) {
-            if (player.getId() == packet.getEntityId()) {
-                return player;
-            }
+        PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
+        try {
+            packet.write(buf);
+            int entityId = buf.readVarInt();
+            Entity entity = mc.world.getEntityById(entityId);
+            if (entity instanceof PlayerEntity pe) return pe;
+        } catch (Exception ignored) {
+        } finally {
+            buf.release();
         }
         return null;
     }
