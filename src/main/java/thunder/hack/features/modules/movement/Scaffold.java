@@ -9,10 +9,7 @@ import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 import thunder.hack.core.manager.client.ModuleManager;
-import thunder.hack.events.impl.EventMove;
-import thunder.hack.events.impl.EventPostSync;
-import thunder.hack.events.impl.EventSync;
-import thunder.hack.events.impl.EventTick;
+import thunder.hack.events.impl.*;
 import thunder.hack.features.modules.Module;
 import thunder.hack.features.modules.client.HudEditor;
 import thunder.hack.setting.Setting;
@@ -29,17 +26,12 @@ import static thunder.hack.utility.player.InteractionUtility.BlockPosWithFacing;
 import static thunder.hack.utility.player.InteractionUtility.checkNearBlocks;
 
 public class Scaffold extends Module {
-    private final Setting<Mode> mode = new Setting<>("Mode", Mode.NCP);
+    private final Setting<Mode> mode = new Setting<>("Mode", Mode.Matrix);
     private final Setting<InteractionUtility.PlaceMode> placeMode = new Setting<>("PlaceMode", InteractionUtility.PlaceMode.Normal, v -> !mode.is(Mode.Grim) && !mode.is(Mode.Matrix) && !mode.is(Mode.Legit));
     private final Setting<Switch> autoSwitch = new Setting<>("Switch", Switch.Silent);
     private final Setting<Boolean> rotate = new Setting<>("Rotate", true);
-    private final Setting<Boolean> lockY = new Setting<>("LockY", false);
-    private final Setting<Boolean> onlyNotHoldingSpace = new Setting<>("OnlyNotHoldingSpace", false, v -> lockY.getValue());
-    private final Setting<Boolean> autoJump = new Setting<>("AutoJump", false);
-    private final Setting<Boolean> allowShift = new Setting<>("WorkWhileSneaking", false);
-    private final Setting<Boolean> tower = new Setting<>("Tower", true, v -> !mode.is(Mode.Grim) && !mode.is(Mode.Matrix) && !mode.is(Mode.Legit));
     private final Setting<Boolean> safewalk = new Setting<>("SafeWalk", true, v -> !mode.is(Mode.Grim) && !mode.is(Mode.Matrix));
-    private final Setting<Boolean> echestholding = new Setting<>("EchestHolding", false);
+    private final Setting<Boolean> tower = new Setting<>("Tower", true, v -> !mode.is(Mode.Grim) && !mode.is(Mode.Matrix) && !mode.is(Mode.Legit));
     private final Setting<SettingGroup> renderCategory = new Setting<>("Render", new SettingGroup(false, 0));
     private final Setting<Boolean> render = new Setting<>("Render", true).addToGroup(renderCategory);
     private final Setting<BlockAnimationUtility.BlockRenderMode> renderMode = new Setting<>("RenderMode", BlockAnimationUtility.BlockRenderMode.All).addToGroup(renderCategory);
@@ -47,10 +39,10 @@ public class Scaffold extends Module {
     private final Setting<ColorSetting> renderFillColor = new Setting<>("RenderFillColor", new ColorSetting(HudEditor.getColor(0))).addToGroup(renderCategory);
     private final Setting<ColorSetting> renderLineColor = new Setting<>("RenderLineColor", new ColorSetting(HudEditor.getColor(0))).addToGroup(renderCategory);
     private final Setting<Integer> renderLineWidth = new Setting<>("RenderLineWidth", 2, 1, 5).addToGroup(renderCategory);
-    private final Setting<Integer> matrixDelay = new Setting<>("MatrixDelay", 3, 1, 10, v -> mode.is(Mode.Matrix));
-    private final Setting<Integer> legitDelay = new Setting<>("LegitDelay", 5, 1, 20, v -> mode.is(Mode.Legit));
-    private final Setting<Float> matrixPitch = new Setting<>("MatrixPitch", 72f, 45f, 90f, v -> mode.is(Mode.Matrix));
-    private final Setting<Float> legitPitch = new Setting<>("LegitPitch", 85f, 45f, 90f, v -> mode.is(Mode.Legit));
+    private final Setting<Integer> matrixDelay = new Setting<>("MatrixDelay", 0, 0, 10, v -> mode.is(Mode.Matrix));
+    private final Setting<Integer> legitDelay = new Setting<>("LegitDelay", 3, 1, 20, v -> mode.is(Mode.Legit));
+    private final Setting<Float> matrixPitch = new Setting<>("MatrixPitch", 82f, 45f, 90f, v -> mode.is(Mode.Matrix));
+    private final Setting<Float> legitPitch = new Setting<>("LegitPitch", 82f, 45f, 90f, v -> mode.is(Mode.Legit));
 
     private enum Mode { NCP, StrictNCP, Grim, Matrix, Legit }
     private enum Switch { Normal, Silent, Inventory, None }
@@ -58,23 +50,17 @@ public class Scaffold extends Module {
     private final Timer timer = new Timer();
     private final Timer placeTimer = new Timer();
     private BlockPosWithFacing currentblock;
-    private int prevY;
     private float rotationYaw, rotationPitch;
 
     public Scaffold() {
         super("Scaffold", Category.MOVEMENT);
     }
 
-    @Override
-    public void onEnable() {
-        prevY = -999;
-    }
-
     @EventHandler
     public void onMove(EventMove event) {
         if (fullNullCheck()) return;
 
-        if (mode.is(Mode.Matrix)) {
+        if (mode.is(Mode.Matrix) || mode.is(Mode.Legit)) {
             if (mc.player.isOnGround() && mc.options.backKey.isPressed()) {
                 MovementUtility.setMotion(0.18);
             }
@@ -95,127 +81,67 @@ public class Scaffold extends Module {
         }
     }
 
-    @EventHandler public void onTick(EventTick e) {
-        if (mode.is(Mode.Grim) || mode.is(Mode.Matrix) || mode.is(Mode.Legit)) {
-            preAction(); postAction();
-        }
-    }
-
-    @EventHandler public void onPre(EventSync e) {
-        if (!mode.is(Mode.Grim) && !mode.is(Mode.Matrix) && !mode.is(Mode.Legit)) preAction();
-    }
-
-    public void preAction() {
+    @EventHandler
+    public void onPre(EventSync e) {
         currentblock = null;
-        if (mc.player.isSneaking() && !allowShift.getValue()) return;
+        if (!mode.is(Mode.Grim) && !mode.is(Mode.Matrix) && !mode.is(Mode.Legit)) return;
         if (prePlace(false) == -1) return;
 
-        if (mc.options.jumpKey.isPressed() && !MovementUtility.isMoving()) prevY = (int) Math.floor(mc.player.getY() - 1);
-        if (MovementUtility.isMoving() && autoJump.getValue()) {
-            if (mc.options.jumpKey.isPressed()) { if (onlyNotHoldingSpace.getValue()) prevY = (int) Math.floor(mc.player.getY() - 1); }
-            else if (mc.player.isOnGround()) mc.player.jump();
-        }
-
-        BlockPos bp = lockY.getValue() && prevY != -999 ? BlockPos.ofFloored(mc.player.getX(), prevY, mc.player.getZ()) : new BlockPos((int) Math.floor(mc.player.getX()), (int) Math.floor(mc.player.getY() - 1), (int) Math.floor(mc.player.getZ()));
+        BlockPos bp = BlockPos.ofFloored(mc.player.getX(), mc.player.getY() - 1, mc.player.getZ());
         if (!mc.world.getBlockState(bp).isReplaceable()) return;
         currentblock = checkNearBlocksExtended(bp);
         if (currentblock != null) {
             float[] rots = InteractionUtility.calculateAngle(currentblock.position().toCenterPos());
             rotationYaw = rots[0]; rotationPitch = rots[1];
-
-            if (mode.is(Mode.Matrix)) {
-                rotationYaw = mc.player.getYaw() + 180f;
-                rotationPitch = matrixPitch.getValue();
-            } else if (mode.is(Mode.Legit)) {
-                rotationPitch = legitPitch.getValue();
-            }
-
-            if (rotate.getValue() && !mode.is(Mode.Grim) && !mode.is(Mode.Matrix) && !mode.is(Mode.Legit)) {
-                mc.player.setYaw(rotationYaw); mc.player.setPitch(rotationPitch);
-            }
+            if (mode.is(Mode.Matrix)) { rotationYaw = mc.player.getYaw() + 180f; rotationPitch = matrixPitch.getValue(); }
+            else if (mode.is(Mode.Legit)) rotationPitch = legitPitch.getValue();
             ModuleManager.rotations.fixRotation = rotationYaw;
         }
     }
 
-    @EventHandler public void onPost(EventPostSync e) {
-        if (!mode.is(Mode.Grim) && !mode.is(Mode.Matrix) && !mode.is(Mode.Legit)) postAction();
-    }
-
-    public void postAction() {
+    @EventHandler
+    public void onPost(EventPostSync e) {
         if (currentblock == null) return;
         if (mode.is(Mode.Matrix) && !placeTimer.passedMs(matrixDelay.getValue())) return;
         if (mode.is(Mode.Legit) && !placeTimer.passedMs(legitDelay.getValue() * 50)) return;
 
         int prevItem = prePlace(true);
         if (prevItem != -1) {
-            if (mc.player.input.jumping && !MovementUtility.isMoving() && tower.getValue() && !mode.is(Mode.Grim) && !mode.is(Mode.Matrix) && !mode.is(Mode.Legit)) {
-                mc.player.setVelocity(0.0, 0.42, 0.0);
-                if (timer.passedMs(1500)) { mc.player.setVelocity(mc.player.getVelocity().x, -0.28, mc.player.getVelocity().z); timer.reset(); }
-            } else timer.reset();
-
             BlockHitResult bhr = new BlockHitResult(currentblock.position().toCenterPos(), currentblock.facing(), currentblock.position(), false);
-            if (mode.is(Mode.Grim) || mode.is(Mode.Matrix) || mode.is(Mode.Legit)) sendPacket(new PlayerMoveC2SPacket.Full(mc.player.getX(), mc.player.getY(), mc.player.getZ(), rotationYaw, rotationPitch, mc.player.isOnGround()));
+            if (mode.is(Mode.Grim) || mode.is(Mode.Matrix) || mode.is(Mode.Legit))
+                sendPacket(new PlayerMoveC2SPacket.Full(mc.player.getX(), mc.player.getY(), mc.player.getZ(), rotationYaw, rotationPitch, mc.player.isOnGround()));
             mc.interactionManager.interactBlock(mc.player, prevItem == -2 ? Hand.OFF_HAND : Hand.MAIN_HAND, bhr);
             mc.player.networkHandler.sendPacket(new HandSwingC2SPacket(prevItem == -2 ? Hand.OFF_HAND : Hand.MAIN_HAND));
-            prevY = currentblock.position().getY();
-            if (mode.is(Mode.Grim) || mode.is(Mode.Matrix) || mode.is(Mode.Legit)) sendPacket(new PlayerMoveC2SPacket.Full(mc.player.getX(), mc.player.getY(), mc.player.getZ(), mc.player.getYaw(), mc.player.getPitch(), mc.player.isOnGround()));
+            if (mode.is(Mode.Grim) || mode.is(Mode.Matrix) || mode.is(Mode.Legit))
+                sendPacket(new PlayerMoveC2SPacket.Full(mc.player.getX(), mc.player.getY(), mc.player.getZ(), mc.player.getYaw(), mc.player.getPitch(), mc.player.isOnGround()));
             if (render.getValue()) BlockAnimationUtility.renderBlock(currentblock.position(), renderLineColor.getValue().getColorObject(), renderLineWidth.getValue(), renderFillColor.getValue().getColorObject(), animationMode.getValue(), renderMode.getValue());
             postPlace(prevItem);
             placeTimer.reset();
         }
     }
 
-    private BlockPosWithFacing checkNearBlocksExtended(BlockPos blockPos) {
-        BlockPosWithFacing ret = null;
-        ret = checkNearBlocks(blockPos); if (ret != null) return ret;
-        ret = checkNearBlocks(blockPos.add(-1, 0, 0)); if (ret != null) return ret;
-        ret = checkNearBlocks(blockPos.add(1, 0, 0)); if (ret != null) return ret;
-        ret = checkNearBlocks(blockPos.add(0, 0, 1)); if (ret != null) return ret;
-        ret = checkNearBlocks(blockPos.add(0, 0, -1)); if (ret != null) return ret;
-        ret = checkNearBlocks(blockPos.add(-2, 0, 0)); if (ret != null) return ret;
-        ret = checkNearBlocks(blockPos.add(2, 0, 0)); if (ret != null) return ret;
-        ret = checkNearBlocks(blockPos.add(0, 0, 2)); if (ret != null) return ret;
-        ret = checkNearBlocks(blockPos.add(0, 0, -2)); if (ret != null) return ret;
-        ret = checkNearBlocks(blockPos.add(0, -1, 0)); if (ret != null) return ret;
-        ret = checkNearBlocks(blockPos.add(1, -1, 0)); if (ret != null) return ret;
-        ret = checkNearBlocks(blockPos.add(-1, -1, 0)); if (ret != null) return ret;
-        ret = checkNearBlocks(blockPos.add(0, -1, 1)); if (ret != null) return ret;
-        return checkNearBlocks(blockPos.add(0, -1, -1));
+    private BlockPosWithFacing checkNearBlocksExtended(BlockPos pos) {
+        BlockPosWithFacing r = checkNearBlocks(pos); if (r != null) return r;
+        r = checkNearBlocks(pos.add(-1, 0, 0)); if (r != null) return r;
+        r = checkNearBlocks(pos.add(1, 0, 0)); if (r != null) return r;
+        r = checkNearBlocks(pos.add(0, 0, 1)); if (r != null) return r;
+        r = checkNearBlocks(pos.add(0, 0, -1)); if (r != null) return r;
+        return checkNearBlocks(pos.add(0, -1, 0));
     }
 
     private int prePlace(boolean swap) {
-        if (mc.player == null || mc.world == null || mc.interactionManager == null) return -1;
         if (mc.player.getOffHandStack().getItem() instanceof BlockItem bi && !bi.getBlock().getDefaultState().isReplaceable()) return -2;
         if (mc.player.getMainHandStack().getItem() instanceof BlockItem bi && !bi.getBlock().getDefaultState().isReplaceable()) return mc.player.getInventory().selectedSlot;
 
-        int prevSlot = mc.player.getInventory().selectedSlot;
-        SearchInvResult hotbarResult = InventoryUtility.findInHotBar(i -> i.getItem() instanceof BlockItem bi && !bi.getBlock().getDefaultState().isReplaceable());
-        SearchInvResult invResult = InventoryUtility.findInInventory(i -> i.getItem() instanceof BlockItem bi && !bi.getBlock().getDefaultState().isReplaceable());
-
-        if (swap) {
-            switch (autoSwitch.getValue()) {
-                case Inventory -> {
-                    if (invResult.found()) {
-                        prevSlot = invResult.slot();
-                        mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, prevSlot, mc.player.getInventory().selectedSlot, SlotActionType.SWAP, mc.player);
-                        sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
-                    }
-                }
-                case Normal, Silent -> hotbarResult.switchTo();
-            }
-        }
-        return prevSlot;
+        int prev = mc.player.getInventory().selectedSlot;
+        SearchInvResult hotbar = InventoryUtility.findInHotBar(i -> i.getItem() instanceof BlockItem bi && !bi.getBlock().getDefaultState().isReplaceable());
+        if (swap) { if (autoSwitch.getValue() != Switch.None) hotbar.switchTo(); }
+        return prev;
     }
 
-    private void postPlace(int prevSlot) {
-        if (prevSlot == -1 || prevSlot == -2) return;
-        switch (autoSwitch.getValue()) {
-            case Inventory -> {
-                mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, prevSlot, mc.player.getInventory().selectedSlot, SlotActionType.SWAP, mc.player);
-                sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
-            }
-            case Silent -> InventoryUtility.switchTo(prevSlot);
-        }
+    private void postPlace(int prev) {
+        if (prev == -1 || prev == -2) return;
+        if (autoSwitch.getValue() == Switch.Silent) InventoryUtility.switchTo(prev);
     }
 
     private boolean isOffsetBBEmpty(double x, double z) {
