@@ -1,15 +1,14 @@
 package thunder.hack.features.modules.misc;
 
-import io.netty.buffer.Unpooled;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.Entity;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.item.ShearsItem;
 import net.minecraft.item.SwordItem;
-import net.minecraft.network.PacketByteBuf;
+import net.minecraft.network.packet.c2s.play.HandSwingC2SPacket;
 import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
 import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
 import net.minecraft.network.packet.s2c.play.EntityEquipmentUpdateS2CPacket;
@@ -18,6 +17,7 @@ import net.minecraft.text.Style;
 import net.minecraft.text.Text;
 import net.minecraft.text.TextColor;
 import net.minecraft.util.Formatting;
+import net.minecraft.util.Hand;
 import thunder.hack.core.Managers;
 import thunder.hack.events.impl.PacketEvent;
 import thunder.hack.features.modules.Module;
@@ -32,19 +32,22 @@ public class MurderMystery extends Module {
     private final Setting<Boolean> detectiveTracker = new Setting<>("DetectiveTracker", false);
     private final Setting<Server> server = new Setting<>("Server", Server.FunnyGame);
     private final Setting<Boolean> publicChat = new Setting<>("PublicChat", false);
-    private final Setting<Boolean> silentSwap = new Setting<>("SilentSwap", false);
-    private final Setting<Boolean> nameTagColors = new Setting<>("NameTagColors", true);
+    private final Setting<Boolean> nameTagColors = new Setting<>("NameColors", true);
     private final Setting<Language> language = new Setting<>("Language", Language.RU);
+    private final Setting<Boolean> silentSwap = new Setting<>("SilentSwap", false);
+    private final Setting<Float> swapRange = new Setting<>("SwapRange", 3.0f, 3.0f, 6.0f, v -> silentSwap.getValue());
+    private final Setting<Boolean> noSwing = new Setting<>("NoSwing", false, v -> silentSwap.getValue());
 
     private enum Server { FunnyGame, Sword }
     private enum Language { RU, EN }
 
     private String killerName = null;
     private String detectiveName = null;
-    private boolean swapInProgress = false;
 
     @EventHandler
     public void onPacketReceive(PacketEvent.Receive event) {
+        if (fullNullCheck()) return;
+
         if (event.getPacket() instanceof PlayerListS2CPacket) {
             killerName = null;
             detectiveName = null;
@@ -54,40 +57,37 @@ public class MurderMystery extends Module {
         if (event.getPacket() instanceof EntityEquipmentUpdateS2CPacket packet) {
             for (var pair : packet.getEquipmentList()) {
                 if (pair.getFirst() != EquipmentSlot.MAINHAND) continue;
-                ItemStack held = pair.getSecond();
-                if (held.isEmpty()) return;
+                Item heldItem = pair.getSecond().getItem();
+                if (heldItem == Items.AIR) continue;
 
-                // Находим игрока по предмету в руке (обходим проблему с RegistryByteBuf)
                 for (PlayerEntity player : mc.world.getPlayers()) {
                     if (player == mc.player) continue;
                     if (!player.isAlive()) continue;
-                    if (!player.getMainHandStack().equals(held)) continue;
+                    if (player.getMainHandStack().getItem() != heldItem) continue;
 
                     if (killerTracker.getValue()) {
-                        if (server.getValue() == Server.Sword && held.getItem() instanceof SwordItem) {
+                        if (server.getValue() == Server.Sword && heldItem instanceof SwordItem) {
                             updateKiller(player.getName().getString());
-                        } else if (server.getValue() == Server.FunnyGame && held.getItem() instanceof ShearsItem) {
+                        } else if (server.getValue() == Server.FunnyGame && heldItem instanceof ShearsItem) {
                             updateKiller(player.getName().getString());
                         }
                     }
 
                     if (detectiveTracker.getValue()) {
-                        if (held.getItem() == Items.BOW) {
+                        if (heldItem == Items.BOW) {
                             String name = player.getName().getString();
                             if (!name.equals(killerName)) {
                                 updateDetective(name);
                             }
                         }
                     }
-                    break;
                 }
-                break;
             }
         }
     }
 
     private void updateKiller(String name) {
-        if (!name.equals(killerName)) {
+        if (name != null && !name.equals(killerName)) {
             killerName = name;
             String word = language.getValue() == Language.RU ? "\u0443\u0431\u0438\u0439\u0446\u0430" : "is the murderer";
             String msg = "\u26A0 " + killerName + " " + word + " \u26A0";
@@ -97,7 +97,7 @@ public class MurderMystery extends Module {
     }
 
     private void updateDetective(String name) {
-        if (!name.equals(detectiveName)) {
+        if (name != null && !name.equals(detectiveName)) {
             detectiveName = name;
             String word = language.getValue() == Language.RU ? "\u0434\u0435\u0442\u0435\u043a\u0442\u0438\u0432" : "is the detective";
             String msg = "\u26A0 " + detectiveName + " " + word + " \u26A0";
@@ -123,31 +123,34 @@ public class MurderMystery extends Module {
 
     @EventHandler
     public void onPacketSend(PacketEvent.Send event) {
+        if (fullNullCheck()) return;
         if (!silentSwap.getValue()) return;
 
         if (event.getPacket() instanceof PlayerInteractEntityC2SPacket packet) {
             PlayerEntity target = getEntityFromPacket(packet);
             if (target == null || target == mc.player) return;
-            if (swapInProgress) return;
+            if (mc.player.distanceTo(target) > swapRange.getValue()) return;
 
             int weaponSlot = findWeaponSlot();
             if (weaponSlot == -1) return;
-
             if (isWeapon(mc.player.getInventory().getStack(mc.player.getInventory().selectedSlot))) return;
 
             int currentSlot = mc.player.getInventory().selectedSlot;
-            swapInProgress = true;
+            event.cancel();
 
             sendPacket(new UpdateSelectedSlotC2SPacket(weaponSlot));
             mc.player.getInventory().selectedSlot = weaponSlot;
-            event.cancel();
+
+            if (noSwing.getValue()) {
+                sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
+            }
 
             Managers.ASYNC.run(() -> {
                 try { Thread.sleep(50); } catch (InterruptedException ignored) {}
                 sendPacket(PlayerInteractEntityC2SPacket.attack(target, false));
                 sendPacket(new UpdateSelectedSlotC2SPacket(currentSlot));
                 mc.player.getInventory().selectedSlot = currentSlot;
-                swapInProgress = false;
+                mc.player.getInventory().selectedSlot = currentSlot;
             });
         }
     }
@@ -187,16 +190,14 @@ public class MurderMystery extends Module {
     }
 
     private PlayerEntity getEntityFromPacket(PlayerInteractEntityC2SPacket packet) {
-        PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
-        try {
-            packet.write(buf);
-            int entityId = buf.readVarInt();
-            Entity entity = mc.world.getEntityById(entityId);
-            if (entity instanceof PlayerEntity pe) return pe;
-        } catch (Exception ignored) {
-        } finally {
-            buf.release();
+        for (PlayerEntity player : mc.world.getPlayers()) {
+            if (player.getId() == packet.getEntityId()) {
+                return player;
+            }
         }
         return null;
     }
+
+    public String getKillerName() { return killerName; }
+    public String getDetectiveName() { return detectiveName; }
 }
