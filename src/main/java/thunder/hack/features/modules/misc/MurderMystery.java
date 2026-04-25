@@ -14,13 +14,13 @@ import net.minecraft.network.packet.c2s.play.HandSwingC2SPacket;
 import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
 import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
 import net.minecraft.network.packet.s2c.play.EntityEquipmentUpdateS2CPacket;
+import net.minecraft.network.packet.s2c.play.PlayerListS2CPacket;
 import net.minecraft.text.Style;
 import net.minecraft.text.Text;
 import net.minecraft.text.TextColor;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Hand;
 import thunder.hack.events.impl.PacketEvent;
-import thunder.hack.events.impl.WorldChangeEvent;
 import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
 import thunder.hack.utility.Timer;
@@ -67,16 +67,16 @@ public class MurderMystery extends Module {
     }
 
     @EventHandler
-    public void onWorldChange(WorldChangeEvent event) {
-        killerName = null;
-        detectiveNames.clear();
-        chatTimer.reset();
-    }
-
-    @EventHandler
     public void onPacketReceive(PacketEvent.Receive event) {
         if (fullNullCheck()) return;
         if (!isEnabled()) return;
+
+        if (event.getPacket() instanceof PlayerListS2CPacket) {
+            killerName = null;
+            detectiveNames.clear();
+            chatTimer.reset();
+            return;
+        }
 
         if (event.getPacket() instanceof EntityEquipmentUpdateS2CPacket packet) {
             for (var pair : packet.getEquipmentList()) {
