@@ -15,7 +15,9 @@ import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
 import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
 import net.minecraft.network.packet.s2c.play.EntityEquipmentUpdateS2CPacket;
 import net.minecraft.network.packet.s2c.play.PlayerListS2CPacket;
+import net.minecraft.text.Style;
 import net.minecraft.text.Text;
+import net.minecraft.text.TextColor;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Hand;
 import thunder.hack.events.impl.PacketEvent;
@@ -23,7 +25,9 @@ import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
 import thunder.hack.utility.Timer;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 public class MurderMystery extends Module {
@@ -46,6 +50,7 @@ public class MurderMystery extends Module {
     private String killerName = null;
     private final Set<String> detectiveNames = new HashSet<>();
     private final Timer chatTimer = new Timer();
+    private final Timer scanTimer = new Timer();
     private boolean sending = false;
 
     @Override
@@ -53,6 +58,7 @@ public class MurderMystery extends Module {
         killerName = null;
         detectiveNames.clear();
         chatTimer.reset();
+        scanTimer.reset();
     }
 
     @Override
@@ -106,10 +112,38 @@ public class MurderMystery extends Module {
         }
     }
 
+    @Override
+    public void onUpdate() {
+        if (fullNullCheck()) return;
+        if (!isEnabled()) return;
+
+        if (scanTimer.passedMs(1000)) {
+            for (PlayerEntity player : new ArrayList<>(mc.world.getPlayers())) {
+                if (player == mc.player) continue;
+                ItemStack held = player.getMainHandStack();
+                if (held.isEmpty()) continue;
+
+                String name = player.getName().getString();
+
+                if (killerTracker.getValue()) {
+                    if (held.getItem() instanceof ShearsItem || held.getItem() == Items.IRON_SWORD) {
+                        updateKiller(name);
+                    }
+                }
+
+                if (detectiveTracker.getValue()) {
+                    if (held.getItem() == Items.BOW && !name.equals(killerName)) {
+                        updateDetective(name);
+                    }
+                }
+            }
+            scanTimer.reset();
+        }
+    }
+
     private void updateKiller(String name) {
         if (name != null && !name.equals(killerName)) {
             killerName = name;
-            String msg = "§#FF0000⚠ " + killerName + " §#FF0000убийца §#FF0000⚠";
             String publicMsg;
 
             switch (message.getValue()) {
@@ -119,7 +153,7 @@ public class MurderMystery extends Module {
                 default -> publicMsg = "⚠ " + killerName + " убийца ⚠";
             }
 
-            displayNotification(msg);
+            displayKillerNotification(killerName);
             if (publicChat.getValue() && chatTimer.passedMs(5100)) {
                 sendPublicMessage(publicMsg);
                 chatTimer.reset();
@@ -129,9 +163,34 @@ public class MurderMystery extends Module {
 
     private void updateDetective(String name) {
         if (name != null && detectiveNames.add(name)) {
-            String msg = "§3⚠ " + name + " §3детектив §3⚠";
-            displayNotification(msg);
+            displayDetectiveNotification(name);
         }
+    }
+
+    private void displayKillerNotification(String name) {
+        if (fullNullCheck()) return;
+        String prefix = "\u230a" + Formatting.GOLD + "\u26a1" + Formatting.RESET + "\u230b";
+
+        Text prefixText = Text.literal(prefix + " ");
+        Text warn1 = Text.literal("⚠ ").setStyle(Style.EMPTY.withColor(TextColor.fromRgb(0xFF0000)));
+        Text playerName = Text.literal(name).setStyle(Style.EMPTY.withColor(TextColor.fromRgb(0xFFFFFF)));
+        Text warn2 = Text.literal(" убийца ").setStyle(Style.EMPTY.withColor(TextColor.fromRgb(0xFF0000)));
+        Text warn3 = Text.literal("⚠").setStyle(Style.EMPTY.withColor(TextColor.fromRgb(0xFF0000)));
+
+        mc.player.sendMessage(prefixText.copy().append(warn1).append(playerName).append(warn2).append(warn3), false);
+    }
+
+    private void displayDetectiveNotification(String name) {
+        if (fullNullCheck()) return;
+        String prefix = "\u230a" + Formatting.GOLD + "\u26a1" + Formatting.RESET + "\u230b";
+
+        Text prefixText = Text.literal(prefix + " ");
+        Text warn1 = Text.literal("⚠ ").setStyle(Style.EMPTY.withColor(TextColor.fromRgb(0x00AAAA)));
+        Text playerName = Text.literal(name).setStyle(Style.EMPTY.withColor(TextColor.fromRgb(0xFFFFFF)));
+        Text warn2 = Text.literal(" детектив ").setStyle(Style.EMPTY.withColor(TextColor.fromRgb(0x00AAAA)));
+        Text warn3 = Text.literal("⚠").setStyle(Style.EMPTY.withColor(TextColor.fromRgb(0x00AAAA)));
+
+        mc.player.sendMessage(prefixText.copy().append(warn1).append(playerName).append(warn2).append(warn3), false);
     }
 
     @EventHandler
@@ -180,12 +239,6 @@ public class MurderMystery extends Module {
             if (isWeapon(stack)) return i;
         }
         return -1;
-    }
-
-    private void displayNotification(String message) {
-        if (fullNullCheck()) return;
-        String prefix = "\u230a" + Formatting.GOLD + "\u26a1" + Formatting.RESET + "\u230b";
-        mc.player.sendMessage(Text.literal(prefix + " " + message), false);
     }
 
     private void sendPublicMessage(String message) {
