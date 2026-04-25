@@ -21,13 +21,13 @@ import net.minecraft.text.TextColor;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Hand;
 import thunder.hack.events.impl.PacketEvent;
+import thunder.hack.events.impl.WorldChangeEvent;
 import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
 import thunder.hack.utility.Timer;
 
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 public class MurderMystery extends Module {
@@ -68,16 +68,16 @@ public class MurderMystery extends Module {
     }
 
     @EventHandler
+    public void onWorldChange(WorldChangeEvent event) {
+        killerName = null;
+        detectiveNames.clear();
+        chatTimer.reset();
+    }
+
+    @EventHandler
     public void onPacketReceive(PacketEvent.Receive event) {
         if (fullNullCheck()) return;
         if (!isEnabled()) return;
-
-        if (event.getPacket() instanceof PlayerListS2CPacket) {
-            killerName = null;
-            detectiveNames.clear();
-            chatTimer.reset();
-            return;
-        }
 
         if (event.getPacket() instanceof EntityEquipmentUpdateS2CPacket packet) {
             for (var pair : packet.getEquipmentList()) {
