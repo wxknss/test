@@ -1,205 +1,224 @@
-package thunder.hack.features.modules.misc;
+package thunder.hack.features.modules.movement;
 
-import io.netty.buffer.Unpooled;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.item.ShearsItem;
-import net.minecraft.item.SwordItem;
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.network.packet.c2s.play.HandSwingC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
-import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
-import net.minecraft.network.packet.s2c.play.EntityEquipmentUpdateS2CPacket;
-import net.minecraft.network.packet.s2c.play.PlayerListS2CPacket;
-import net.minecraft.text.Style;
-import net.minecraft.text.Text;
-import net.minecraft.text.TextColor;
-import net.minecraft.util.Formatting;
+import net.minecraft.item.BlockItem;
+import net.minecraft.network.packet.c2s.play.*;
+import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.util.Hand;
-import thunder.hack.core.Managers;
-import thunder.hack.events.impl.PacketEvent;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Vec3d;
+import thunder.hack.core.manager.client.ModuleManager;
+import thunder.hack.events.impl.EventMove;
+import thunder.hack.events.impl.EventPostSync;
+import thunder.hack.events.impl.EventSync;
+import thunder.hack.events.impl.EventTick;
 import thunder.hack.features.modules.Module;
+import thunder.hack.features.modules.client.HudEditor;
 import thunder.hack.setting.Setting;
+import thunder.hack.setting.impl.ColorSetting;
+import thunder.hack.setting.impl.SettingGroup;
+import thunder.hack.utility.Timer;
+import thunder.hack.utility.player.InteractionUtility;
+import thunder.hack.utility.player.InventoryUtility;
+import thunder.hack.utility.player.MovementUtility;
+import thunder.hack.utility.player.SearchInvResult;
+import thunder.hack.utility.render.BlockAnimationUtility;
 
-public class MurderMystery extends Module {
-    public MurderMystery() {
-        super("MurderMystery", Category.MISC);
+import static thunder.hack.utility.player.InteractionUtility.BlockPosWithFacing;
+import static thunder.hack.utility.player.InteractionUtility.checkNearBlocks;
+
+public class Scaffold extends Module {
+    private final Setting<Mode> mode = new Setting<>("Mode", Mode.NCP);
+    private final Setting<InteractionUtility.PlaceMode> placeMode = new Setting<>("PlaceMode", InteractionUtility.PlaceMode.Normal, v -> !mode.is(Mode.Grim) && !mode.is(Mode.Matrix) && !mode.is(Mode.Legit));
+    private final Setting<Switch> autoSwitch = new Setting<>("Switch", Switch.Silent);
+    private final Setting<Boolean> rotate = new Setting<>("Rotate", true);
+    private final Setting<Boolean> lockY = new Setting<>("LockY", false);
+    private final Setting<Boolean> onlyNotHoldingSpace = new Setting<>("OnlyNotHoldingSpace", false, v -> lockY.getValue());
+    private final Setting<Boolean> autoJump = new Setting<>("AutoJump", false);
+    private final Setting<Boolean> allowShift = new Setting<>("WorkWhileSneaking", false);
+    private final Setting<Boolean> tower = new Setting<>("Tower", true, v -> !mode.is(Mode.Grim) && !mode.is(Mode.Matrix) && !mode.is(Mode.Legit));
+    private final Setting<Boolean> safewalk = new Setting<>("SafeWalk", true, v -> !mode.is(Mode.Grim) && !mode.is(Mode.Matrix));
+    private final Setting<Boolean> echestholding = new Setting<>("EchestHolding", false);
+    private final Setting<SettingGroup> renderCategory = new Setting<>("Render", new SettingGroup(false, 0));
+    private final Setting<Boolean> render = new Setting<>("Render", true).addToGroup(renderCategory);
+    private final Setting<BlockAnimationUtility.BlockRenderMode> renderMode = new Setting<>("RenderMode", BlockAnimationUtility.BlockRenderMode.All).addToGroup(renderCategory);
+    private final Setting<BlockAnimationUtility.BlockAnimationMode> animationMode = new Setting<>("BlockAnimationMode", BlockAnimationUtility.BlockAnimationMode.Fade).addToGroup(renderCategory);
+    private final Setting<ColorSetting> renderFillColor = new Setting<>("RenderFillColor", new ColorSetting(HudEditor.getColor(0))).addToGroup(renderCategory);
+    private final Setting<ColorSetting> renderLineColor = new Setting<>("RenderLineColor", new ColorSetting(HudEditor.getColor(0))).addToGroup(renderCategory);
+    private final Setting<Integer> renderLineWidth = new Setting<>("RenderLineWidth", 2, 1, 5).addToGroup(renderCategory);
+    private final Setting<Integer> matrixDelay = new Setting<>("MatrixDelay", 3, 1, 10, v -> mode.is(Mode.Matrix));
+    private final Setting<Integer> legitDelay = new Setting<>("LegitDelay", 5, 1, 20, v -> mode.is(Mode.Legit));
+    private final Setting<Float> matrixPitch = new Setting<>("MatrixPitch", 72f, 45f, 90f, v -> mode.is(Mode.Matrix));
+    private final Setting<Float> legitPitch = new Setting<>("LegitPitch", 85f, 45f, 90f, v -> mode.is(Mode.Legit));
+
+    private enum Mode { NCP, StrictNCP, Grim, Matrix, Legit }
+    private enum Switch { Normal, Silent, Inventory, None }
+
+    private final Timer timer = new Timer();
+    private final Timer placeTimer = new Timer();
+    private BlockPosWithFacing currentblock;
+    private int prevY;
+    private float rotationYaw, rotationPitch;
+
+    public Scaffold() {
+        super("Scaffold", Category.MOVEMENT);
     }
-
-    private final Setting<Boolean> killerTracker = new Setting<>("KillerTracker", true);
-    private final Setting<Boolean> detectiveTracker = new Setting<>("DetectiveTracker", false);
-    private final Setting<Server> server = new Setting<>("Server", Server.FunnyGame);
-    private final Setting<Boolean> publicChat = new Setting<>("PublicChat", false);
-    public final Setting<Boolean> NameColors = new Setting<>("NameColors", true);
-    private final Setting<Language> language = new Setting<>("Language", Language.RU);
-    private final Setting<Boolean> silentSwap = new Setting<>("SilentSwap", false);
-    private final Setting<Float> swapRange = new Setting<>("SwapRange", 3.0f, 3.0f, 6.0f, v -> silentSwap.getValue());
-    private final Setting<Boolean> noSwing = new Setting<>("NoSwing", false, v -> silentSwap.getValue());
-
-    private enum Server { FunnyGame, Sword }
-    private enum Language { RU, EN }
-
-    private String killerName = null;
-    private String detectiveName = null;
 
     @Override
     public void onEnable() {
-        killerName = null;
-        detectiveName = null;
-    }
-
-    @Override
-    public void onDisable() {
-        killerName = null;
-        detectiveName = null;
+        prevY = -999;
     }
 
     @EventHandler
-    public void onPacketReceive(PacketEvent.Receive event) {
+    public void onMove(EventMove event) {
         if (fullNullCheck()) return;
 
-        if (event.getPacket() instanceof PlayerListS2CPacket) {
-            killerName = null;
-            detectiveName = null;
-            return;
+        if (mode.is(Mode.Matrix)) {
+            if (mc.player.isOnGround() && mc.options.backKey.isPressed()) {
+                MovementUtility.setMotion(0.18);
+            }
         }
 
-        if (event.getPacket() instanceof EntityEquipmentUpdateS2CPacket packet) {
-            for (var pair : packet.getEquipmentList()) {
-                if (pair.getFirst() != EquipmentSlot.MAINHAND) continue;
-                Item heldItem = pair.getSecond().getItem();
-                if (heldItem == Items.AIR) continue;
-
-                for (PlayerEntity player : mc.world.getPlayers()) {
-                    if (player == mc.player) continue;
-                    if (!player.isAlive()) continue;
-
-                    if (killerTracker.getValue()) {
-                        if (server.getValue() == Server.Sword && heldItem instanceof SwordItem) {
-                            updateKiller(player.getName().getString());
-                        } else if (server.getValue() == Server.FunnyGame && heldItem instanceof ShearsItem) {
-                            updateKiller(player.getName().getString());
-                        }
-                    }
-
-                    if (detectiveTracker.getValue()) {
-                        if (heldItem == Items.BOW) {
-                            String name = player.getName().getString();
-                            if (!name.equals(killerName)) {
-                                updateDetective(name);
-                            }
-                        }
-                    }
+        if (safewalk.getValue() && !mode.is(Mode.Grim) && !mode.is(Mode.Matrix)) {
+            double x = event.getX(), y = event.getY(), z = event.getZ();
+            if (mc.player.isOnGround() && !mc.player.noClip) {
+                double inc = 0.05;
+                while (x != 0 && isOffsetBBEmpty(x, 0)) x = Math.abs(x) < inc ? 0 : x > 0 ? x - inc : x + inc;
+                while (z != 0 && isOffsetBBEmpty(0, z)) z = Math.abs(z) < inc ? 0 : z > 0 ? z - inc : z + inc;
+                while (x != 0 && z != 0 && isOffsetBBEmpty(x, z)) {
+                    x = Math.abs(x) < inc ? 0 : x > 0 ? x - inc : x + inc;
+                    z = Math.abs(z) < inc ? 0 : z > 0 ? z - inc : z + inc;
                 }
             }
+            event.setX(x); event.setY(y); event.setZ(z); event.cancel();
         }
     }
 
-    private void updateKiller(String name) {
-        if (name != null && !name.equals(killerName)) {
-            killerName = name;
-            String word = language.getValue() == Language.RU ? "\u0443\u0431\u0438\u0439\u0446\u0430" : "is the murderer";
-            String msg = "\u26A0 " + killerName + " " + word + " \u26A0";
-            displayNotification(msg, 0xFF0000);
-            if (publicChat.getValue()) sendPublicMessage(killerName + " " + word);
+    @EventHandler public void onTick(EventTick e) {
+        if (mode.is(Mode.Grim) || mode.is(Mode.Matrix) || mode.is(Mode.Legit)) {
+            preAction(); postAction();
         }
     }
 
-    private void updateDetective(String name) {
-        if (name != null && !name.equals(detectiveName)) {
-            detectiveName = name;
-            String word = language.getValue() == Language.RU ? "\u0434\u0435\u0442\u0435\u043a\u0442\u0438\u0432" : "is the detective";
-            String msg = "\u26A0 " + detectiveName + " " + word + " \u26A0";
-            displayNotification(msg, 0x00AAAA);
-        }
+    @EventHandler public void onPre(EventSync e) {
+        if (!mode.is(Mode.Grim) && !mode.is(Mode.Matrix) && !mode.is(Mode.Legit)) preAction();
     }
 
-    @EventHandler
-    public void onPacketSend(PacketEvent.Send event) {
-        if (fullNullCheck()) return;
-        if (!silentSwap.getValue()) return;
+    public void preAction() {
+        currentblock = null;
+        if (mc.player.isSneaking() && !allowShift.getValue()) return;
+        if (prePlace(false) == -1) return;
 
-        if (event.getPacket() instanceof PlayerInteractEntityC2SPacket packet) {
-            PlayerEntity target = getEntityFromPacket(packet);
-            if (target == null || target == mc.player) return;
-            if (mc.player.distanceTo(target) > swapRange.getValue()) return;
+        if (mc.options.jumpKey.isPressed() && !MovementUtility.isMoving()) prevY = (int) Math.floor(mc.player.getY() - 1);
+        if (MovementUtility.isMoving() && autoJump.getValue()) {
+            if (mc.options.jumpKey.isPressed()) { if (onlyNotHoldingSpace.getValue()) prevY = (int) Math.floor(mc.player.getY() - 1); }
+            else if (mc.player.isOnGround()) mc.player.jump();
+        }
 
-            int weaponSlot = findWeaponSlot();
-            if (weaponSlot == -1) return;
-            if (isWeapon(mc.player.getInventory().getStack(mc.player.getInventory().selectedSlot))) return;
+        BlockPos bp = lockY.getValue() && prevY != -999 ? BlockPos.ofFloored(mc.player.getX(), prevY, mc.player.getZ()) : new BlockPos((int) Math.floor(mc.player.getX()), (int) Math.floor(mc.player.getY() - 1), (int) Math.floor(mc.player.getZ()));
+        if (!mc.world.getBlockState(bp).isReplaceable()) return;
+        currentblock = checkNearBlocksExtended(bp);
+        if (currentblock != null) {
+            float[] rots = InteractionUtility.calculateAngle(currentblock.position().toCenterPos());
+            rotationYaw = rots[0]; rotationPitch = rots[1];
 
-            int currentSlot = mc.player.getInventory().selectedSlot;
-            event.cancel();
-
-            sendPacket(new UpdateSelectedSlotC2SPacket(weaponSlot));
-            mc.player.getInventory().selectedSlot = weaponSlot;
-
-            if (noSwing.getValue()) {
-                sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
+            if (mode.is(Mode.Matrix)) {
+                rotationYaw = mc.player.getYaw() + 180f;
+                rotationPitch = matrixPitch.getValue();
+            } else if (mode.is(Mode.Legit)) {
+                rotationPitch = legitPitch.getValue();
             }
 
-            Managers.ASYNC.run(() -> {
-                try { Thread.sleep(50); } catch (InterruptedException ignored) {}
-                sendPacket(PlayerInteractEntityC2SPacket.attack(target, false));
-                sendPacket(new UpdateSelectedSlotC2SPacket(currentSlot));
-                mc.player.getInventory().selectedSlot = currentSlot;
-            });
+            if (rotate.getValue() && !mode.is(Mode.Grim) && !mode.is(Mode.Matrix) && !mode.is(Mode.Legit)) {
+                mc.player.setYaw(rotationYaw); mc.player.setPitch(rotationPitch);
+            }
+            ModuleManager.rotations.fixRotation = rotationYaw;
         }
     }
 
-    private boolean isWeapon(ItemStack stack) {
-        if (stack.isEmpty()) return false;
-        return switch (server.getValue()) {
-            case Sword -> stack.getItem() instanceof SwordItem;
-            case FunnyGame -> stack.getItem() instanceof ShearsItem;
-        };
+    @EventHandler public void onPost(EventPostSync e) {
+        if (!mode.is(Mode.Grim) && !mode.is(Mode.Matrix) && !mode.is(Mode.Legit)) postAction();
     }
 
-    private int findWeaponSlot() {
-        for (int i = 0; i < 9; i++) {
-            ItemStack stack = mc.player.getInventory().getStack(i);
-            if (stack.isEmpty()) continue;
-            boolean found = switch (server.getValue()) {
-                case Sword -> stack.getItem() instanceof SwordItem;
-                case FunnyGame -> stack.getItem() instanceof ShearsItem;
-            };
-            if (found) return i;
+    public void postAction() {
+        if (currentblock == null) return;
+        if (mode.is(Mode.Matrix) && !placeTimer.passedMs(matrixDelay.getValue())) return;
+        if (mode.is(Mode.Legit) && !placeTimer.passedMs(legitDelay.getValue() * 50)) return;
+
+        int prevItem = prePlace(true);
+        if (prevItem != -1) {
+            if (mc.player.input.jumping && !MovementUtility.isMoving() && tower.getValue() && !mode.is(Mode.Grim) && !mode.is(Mode.Matrix) && !mode.is(Mode.Legit)) {
+                mc.player.setVelocity(0.0, 0.42, 0.0);
+                if (timer.passedMs(1500)) { mc.player.setVelocity(mc.player.getVelocity().x, -0.28, mc.player.getVelocity().z); timer.reset(); }
+            } else timer.reset();
+
+            BlockHitResult bhr = new BlockHitResult(currentblock.position().toCenterPos(), currentblock.facing(), currentblock.position(), false);
+            if (mode.is(Mode.Grim) || mode.is(Mode.Matrix) || mode.is(Mode.Legit)) sendPacket(new PlayerMoveC2SPacket.Full(mc.player.getX(), mc.player.getY(), mc.player.getZ(), rotationYaw, rotationPitch, mc.player.isOnGround()));
+            mc.interactionManager.interactBlock(mc.player, prevItem == -2 ? Hand.OFF_HAND : Hand.MAIN_HAND, bhr);
+            mc.player.networkHandler.sendPacket(new HandSwingC2SPacket(prevItem == -2 ? Hand.OFF_HAND : Hand.MAIN_HAND));
+            prevY = currentblock.position().getY();
+            if (mode.is(Mode.Grim) || mode.is(Mode.Matrix) || mode.is(Mode.Legit)) sendPacket(new PlayerMoveC2SPacket.Full(mc.player.getX(), mc.player.getY(), mc.player.getZ(), mc.player.getYaw(), mc.player.getPitch(), mc.player.isOnGround()));
+            if (render.getValue()) BlockAnimationUtility.renderBlock(currentblock.position(), renderLineColor.getValue().getColorObject(), renderLineWidth.getValue(), renderFillColor.getValue().getColorObject(), animationMode.getValue(), renderMode.getValue());
+            postPlace(prevItem);
+            placeTimer.reset();
         }
-        return -1;
     }
 
-    private void displayNotification(String message, int color) {
-        if (fullNullCheck()) return;
-        String prefix = "\u230a" + Formatting.GOLD + "\u26a1" + Formatting.RESET + "\u230b";
-        Style style = Style.EMPTY.withColor(TextColor.fromRgb(color));
-        Text coloredMessage = Text.literal(prefix + " ").append(Text.literal(message).setStyle(style));
-        mc.player.sendMessage(coloredMessage, false);
+    private BlockPosWithFacing checkNearBlocksExtended(BlockPos blockPos) {
+        BlockPosWithFacing ret = null;
+        ret = checkNearBlocks(blockPos); if (ret != null) return ret;
+        ret = checkNearBlocks(blockPos.add(-1, 0, 0)); if (ret != null) return ret;
+        ret = checkNearBlocks(blockPos.add(1, 0, 0)); if (ret != null) return ret;
+        ret = checkNearBlocks(blockPos.add(0, 0, 1)); if (ret != null) return ret;
+        ret = checkNearBlocks(blockPos.add(0, 0, -1)); if (ret != null) return ret;
+        ret = checkNearBlocks(blockPos.add(-2, 0, 0)); if (ret != null) return ret;
+        ret = checkNearBlocks(blockPos.add(2, 0, 0)); if (ret != null) return ret;
+        ret = checkNearBlocks(blockPos.add(0, 0, 2)); if (ret != null) return ret;
+        ret = checkNearBlocks(blockPos.add(0, 0, -2)); if (ret != null) return ret;
+        ret = checkNearBlocks(blockPos.add(0, -1, 0)); if (ret != null) return ret;
+        ret = checkNearBlocks(blockPos.add(1, -1, 0)); if (ret != null) return ret;
+        ret = checkNearBlocks(blockPos.add(-1, -1, 0)); if (ret != null) return ret;
+        ret = checkNearBlocks(blockPos.add(0, -1, 1)); if (ret != null) return ret;
+        return checkNearBlocks(blockPos.add(0, -1, -1));
     }
 
-    private void sendPublicMessage(String message) {
-        if (fullNullCheck()) return;
-        mc.player.networkHandler.sendChatMessage(message);
-    }
+    private int prePlace(boolean swap) {
+        if (mc.player == null || mc.world == null || mc.interactionManager == null) return -1;
+        if (mc.player.getOffHandStack().getItem() instanceof BlockItem bi && !bi.getBlock().getDefaultState().isReplaceable()) return -2;
+        if (mc.player.getMainHandStack().getItem() instanceof BlockItem bi && !bi.getBlock().getDefaultState().isReplaceable()) return mc.player.getInventory().selectedSlot;
 
-    private PlayerEntity getEntityFromPacket(PlayerInteractEntityC2SPacket packet) {
-        PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
-        try {
-            packet.write(buf);
-            int entityId = buf.readVarInt();
-            Entity entity = mc.world.getEntityById(entityId);
-            if (entity instanceof PlayerEntity pe) return pe;
-        } catch (Exception ignored) {
-        } finally {
-            buf.release();
+        int prevSlot = mc.player.getInventory().selectedSlot;
+        SearchInvResult hotbarResult = InventoryUtility.findInHotBar(i -> i.getItem() instanceof BlockItem bi && !bi.getBlock().getDefaultState().isReplaceable());
+        SearchInvResult invResult = InventoryUtility.findInInventory(i -> i.getItem() instanceof BlockItem bi && !bi.getBlock().getDefaultState().isReplaceable());
+
+        if (swap) {
+            switch (autoSwitch.getValue()) {
+                case Inventory -> {
+                    if (invResult.found()) {
+                        prevSlot = invResult.slot();
+                        mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, prevSlot, mc.player.getInventory().selectedSlot, SlotActionType.SWAP, mc.player);
+                        sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
+                    }
+                }
+                case Normal, Silent -> hotbarResult.switchTo();
+            }
         }
-        return null;
+        return prevSlot;
     }
 
-    public String getKillerName() { return killerName; }
-    public String getDetectiveName() { return detectiveName; }
+    private void postPlace(int prevSlot) {
+        if (prevSlot == -1 || prevSlot == -2) return;
+        switch (autoSwitch.getValue()) {
+            case Inventory -> {
+                mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, prevSlot, mc.player.getInventory().selectedSlot, SlotActionType.SWAP, mc.player);
+                sendPacket(new CloseHandledScreenC2SPacket(mc.player.currentScreenHandler.syncId));
+            }
+            case Silent -> InventoryUtility.switchTo(prevSlot);
+        }
+    }
+
+    private boolean isOffsetBBEmpty(double x, double z) {
+        return !mc.world.getBlockCollisions(mc.player, mc.player.getBoundingBox().expand(-0.1, 0, -0.1).offset(x, -2, z)).iterator().hasNext();
+    }
 }
