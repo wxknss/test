@@ -30,7 +30,10 @@ public class MessageAppend extends Module {
         if (fullNullCheck()) return;
         if (!(e.getPacket() instanceof ChatMessageC2SPacket pac)) return;
 
-        if (ModuleManager.autoEZ.isEnabled()) {
+        if (ModuleManager.autoEZ.isEnabled()) return;
+
+        if (ModuleManager.serverHelper.justSolvedMath) {
+            ModuleManager.serverHelper.justSolvedMath = false;
             return;
         }
 
