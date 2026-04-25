@@ -9,16 +9,13 @@ import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.item.ShearsItem;
-import net.minecraft.item.SwordItem;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.network.packet.c2s.play.HandSwingC2SPacket;
 import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
 import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
 import net.minecraft.network.packet.s2c.play.EntityEquipmentUpdateS2CPacket;
 import net.minecraft.network.packet.s2c.play.PlayerListS2CPacket;
-import net.minecraft.text.Style;
 import net.minecraft.text.Text;
-import net.minecraft.text.TextColor;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Hand;
 import thunder.hack.events.impl.PacketEvent;
@@ -39,13 +36,12 @@ public class MurderMystery extends Module {
     private final Setting<Server> server = new Setting<>("Server", Server.FunnyGame);
     private final Setting<Boolean> publicChat = new Setting<>("PublicChat", false);
     public final Setting<Boolean> NameColors = new Setting<>("NameColors", true);
-    private final Setting<Language> language = new Setting<>("Language", Language.RU);
+    private final Setting<Message> message = new Setting<>("Message", Message.New);
     private final Setting<Boolean> silentSwap = new Setting<>("SilentSwap", false);
-    private final Setting<Float> swapRange = new Setting<>("SwapRange", 3.0f, 3.0f, 6.0f, v -> silentSwap.getValue());
     private final Setting<Boolean> noSwing = new Setting<>("NoSwing", false, v -> silentSwap.getValue());
 
     private enum Server { FunnyGame, Sword }
-    private enum Language { RU, EN }
+    private enum Message { RU, EN, New, Hearts }
 
     private String killerName = null;
     private final Set<String> detectiveNames = new HashSet<>();
@@ -68,6 +64,7 @@ public class MurderMystery extends Module {
     @EventHandler
     public void onPacketReceive(PacketEvent.Receive event) {
         if (fullNullCheck()) return;
+        if (!isEnabled()) return;
 
         if (event.getPacket() instanceof PlayerListS2CPacket) {
             killerName = null;
@@ -82,25 +79,27 @@ public class MurderMystery extends Module {
                 Item heldItem = pair.getSecond().getItem();
                 if (heldItem == Items.AIR) continue;
 
+                PlayerEntity target = null;
                 for (PlayerEntity player : mc.world.getPlayers()) {
                     if (player == mc.player) continue;
-                    if (!player.isAlive()) continue;
-                    if (player.getUuid().version() != 3) continue;
-                    if (player.getName().getString().contains("-")) continue;
-                    if (player.getMainHandStack().getItem() != heldItem) continue;
-
-                    String name = player.getName().getString();
-
-                    if (killerTracker.getValue()) {
-                        if (heldItem instanceof ShearsItem || heldItem instanceof SwordItem) {
-                            updateKiller(name);
-                        }
+                    if (player.getMainHandStack().getItem() == heldItem) {
+                        target = player;
+                        break;
                     }
+                }
+                if (target == null) continue;
 
-                    if (detectiveTracker.getValue()) {
-                        if (heldItem == Items.BOW && !name.equals(killerName)) {
-                            updateDetective(name);
-                        }
+                String name = target.getName().getString();
+
+                if (killerTracker.getValue()) {
+                    if (heldItem instanceof ShearsItem || heldItem == Items.IRON_SWORD) {
+                        updateKiller(name);
+                    }
+                }
+
+                if (detectiveTracker.getValue()) {
+                    if (heldItem == Items.BOW && !name.equals(killerName)) {
+                        updateDetective(name);
                     }
                 }
             }
@@ -110,11 +109,19 @@ public class MurderMystery extends Module {
     private void updateKiller(String name) {
         if (name != null && !name.equals(killerName)) {
             killerName = name;
-            String word = language.getValue() == Language.RU ? "убийца" : "is the murderer";
-            String msg = "§c⚠ §f" + killerName + " §c" + word + " §c⚠";
-            displayNotification(msg, -1);
+            String msg = "§#FF0000⚠ " + killerName + " §#FF0000убийца §#FF0000⚠";
+            String publicMsg;
+
+            switch (message.getValue()) {
+                case RU -> publicMsg = killerName + " убийца";
+                case EN -> publicMsg = killerName + " is the murderer";
+                case Hearts -> publicMsg = "❤ " + killerName + " убийца ❤";
+                default -> publicMsg = "⚠ " + killerName + " убийца ⚠";
+            }
+
+            displayNotification(msg);
             if (publicChat.getValue() && chatTimer.passedMs(5100)) {
-                sendPublicMessage("⚠ " + killerName + " " + word + " ⚠");
+                sendPublicMessage(publicMsg);
                 chatTimer.reset();
             }
         }
@@ -122,22 +129,22 @@ public class MurderMystery extends Module {
 
     private void updateDetective(String name) {
         if (name != null && detectiveNames.add(name)) {
-            String word = language.getValue() == Language.RU ? "детектив" : "is the detective";
-            String msg = "§3⚠ §f" + name + " §3" + word + " §3⚠";
-            displayNotification(msg, -1);
+            String msg = "§3⚠ " + name + " §3детектив §3⚠";
+            displayNotification(msg);
         }
     }
 
     @EventHandler
     public void onPacketSend(PacketEvent.Send event) {
         if (fullNullCheck()) return;
+        if (!isEnabled()) return;
         if (!silentSwap.getValue()) return;
         if (sending) return;
 
         if (event.getPacket() instanceof PlayerInteractEntityC2SPacket packet) {
             PlayerEntity target = getEntityFromPacket(packet);
             if (target == null || target == mc.player) return;
-            if (mc.player.distanceTo(target) > swapRange.getValue()) return;
+            if (mc.player.distanceTo(target) > 3.0f) return;
 
             int weaponSlot = findWeaponSlot();
             if (weaponSlot == -1) return;
@@ -158,11 +165,10 @@ public class MurderMystery extends Module {
         }
     }
 
-
     private boolean isWeapon(ItemStack stack) {
         if (stack.isEmpty()) return false;
         return switch (server.getValue()) {
-            case Sword -> stack.getItem() instanceof SwordItem;
+            case Sword -> stack.getItem() == Items.IRON_SWORD;
             case FunnyGame -> stack.getItem() instanceof ShearsItem;
         };
     }
@@ -171,26 +177,15 @@ public class MurderMystery extends Module {
         for (int i = 0; i < 9; i++) {
             ItemStack stack = mc.player.getInventory().getStack(i);
             if (stack.isEmpty()) continue;
-            boolean found = switch (server.getValue()) {
-                case Sword -> stack.getItem() instanceof SwordItem;
-                case FunnyGame -> stack.getItem() instanceof ShearsItem;
-            };
-            if (found) return i;
+            if (isWeapon(stack)) return i;
         }
         return -1;
     }
 
-    private void displayNotification(String message, int color) {
+    private void displayNotification(String message) {
         if (fullNullCheck()) return;
         String prefix = "\u230a" + Formatting.GOLD + "\u26a1" + Formatting.RESET + "\u230b";
-        Text coloredMessage;
-        if (color == -1) {
-            coloredMessage = Text.literal(prefix + " ").append(Text.literal(message));
-        } else {
-            Style style = Style.EMPTY.withColor(TextColor.fromRgb(color));
-            coloredMessage = Text.literal(prefix + " ").append(Text.literal(message).setStyle(style));
-        }
-        mc.player.sendMessage(coloredMessage, false);
+        mc.player.sendMessage(Text.literal(prefix + " " + message), false);
     }
 
     private void sendPublicMessage(String message) {
