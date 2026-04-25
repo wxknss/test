@@ -49,8 +49,9 @@ public class ServerHelper extends Module {
 
     private final Setting<Boolean> photomath = new Setting<>("PhotoMath", false);
     private final Setting<Boolean> antiTpHere = new Setting<>("AntiTpHere", false);
-    private final Setting<Mode> antiTpMode = new Setting<>("AntiTpMode", Mode.Back, v -> antiTpHere.getValue());
     private final Setting<Boolean> instantTp = new Setting<>("InstantTp", false, v -> antiTpHere.getValue());
+    private final Setting<Mode> antiTpMode = new Setting<>("AntiTpMode", Mode.Spawn, v -> antiTpHere.getValue());
+    private final Setting<Boolean> autoGM3 = new Setting<>("AutoGM3", false);
     private final Setting<Boolean> clanInvite = new Setting<>("ClanInvite", false);
     private final Setting<Integer> clanInviteDelay = new Setting<>("InviteDelay", 10, 1, 30, v -> clanInvite.getValue());
     private final Setting<Boolean> fixAll = new Setting<>("/fix all", true);
@@ -59,14 +60,13 @@ public class ServerHelper extends Module {
     private final Setting<Boolean> airDropWay = new Setting<>("AirDropWay", true);
     private final Setting<Boolean> farmilka = new Setting<>("Farmilka", true);
     public final Setting<Boolean> trueSight = new Setting<>("TrueSight", true);
-    private final Setting<Boolean> spek = new Setting<>("SpekNotify", true);
     private final Setting<Bind> desorient = new Setting<>("Desorient", new Bind(-1, false, false));
     private final Setting<Bind> trap = new Setting<>("Trap", new Bind(-1, false, false));
     public final Setting<Boolean> aucHelper = new Setting<>("AucHelper", true);
     private final Setting<GroupBy> groupBy = new Setting<>("GroupBy", GroupBy.ItemType, v -> aucHelper.getValue());
     private final Setting<Integer> contrast = new Setting<>("Contrast", 4, 1, 15, v -> aucHelper.getValue());
 
-    private enum Mode { Back, Home, Spawn }
+    private enum Mode { Back, Home, Spawn, Warp }
     private enum GroupBy { Name, ItemType }
 
     private final Timer pvpTimer = new Timer();
@@ -82,14 +82,6 @@ public class ServerHelper extends Module {
     @EventHandler
     public void onPacketReceive(PacketEvent.Receive event) {
         if (event.getPacket() instanceof GameMessageS2CPacket pac) {
-            if (spek.getValue()) {
-                String content = pac.content().getString().toLowerCase();
-                if (content.contains("спек") || content.contains("ызус") || content.contains("spec") || content.contains("spek") || content.contains("ызул")) {
-                    String name = ThunderUtility.solveName(pac.content().getString());
-                    Managers.NOTIFICATION.publicity("SpekNotification", isRu() ? name + " хочет чтобы за ним проследили" : name + " wants to be followed", 3, Notification.Type.WARNING);
-                }
-            }
-
             if (photomath.getValue()
                     && pac.content().getString().contains("Решите: ")
                     && Objects.equals(ThunderUtility.solveName(pac.content().getString()), "FATAL ERROR")) {
@@ -110,6 +102,13 @@ public class ServerHelper extends Module {
                 }
             }
 
+            if (autoGM3.getValue()) {
+                String msg = pac.content().getString();
+                if (msg.contains("Вы вышли из режима наблюдения за игроком")) {
+                    mc.player.networkHandler.sendCommand("gm 3");
+                }
+            }
+
             if (airDropWay.getValue() && pac.content().getString().contains("Аирдроп")) {
                 try {
                     int xCord = Integer.parseInt(StringUtils.substringBetween(pac.content().getString(), "координаты X: ", " Y:"));
@@ -125,7 +124,7 @@ public class ServerHelper extends Module {
 
     @Override
     public void onUpdate() {
-        int delay = instantTp.getValue() ? 10 : 100;
+        int delay = instantTp.getValue() ? 0 : 100;
 
         if (flag && atphtimer.passedMs(delay) && antiTpHere.getValue()) {
             StringBuilder log = new StringBuilder("Тебя телепортировали в X: " + (int) mc.player.getX() + " Z: " + (int) mc.player.getZ() + ". Ближайшие игроки : ");
@@ -140,6 +139,7 @@ public class ServerHelper extends Module {
                 case Back -> mc.player.networkHandler.sendCommand("back");
                 case Home -> mc.player.networkHandler.sendCommand("home");
                 case Spawn -> mc.player.networkHandler.sendCommand("spawn");
+                case Warp -> mc.player.networkHandler.sendCommand("warp pvp");
             }
             flag = false;
         }
