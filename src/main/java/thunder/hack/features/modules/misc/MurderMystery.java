@@ -14,7 +14,6 @@ import net.minecraft.network.packet.c2s.play.HandSwingC2SPacket;
 import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
 import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
 import net.minecraft.network.packet.s2c.play.EntityEquipmentUpdateS2CPacket;
-import net.minecraft.network.packet.s2c.play.PlayerListS2CPacket;
 import net.minecraft.text.Style;
 import net.minecraft.text.Text;
 import net.minecraft.text.TextColor;
@@ -116,6 +115,12 @@ public class MurderMystery extends Module {
     public void onUpdate() {
         if (fullNullCheck()) return;
         if (!isEnabled()) return;
+
+        if (mc.world.getPlayers().size() < 3) {
+            killerName = null;
+            detectiveNames.clear();
+            return;
+        }
 
         if (scanTimer.passedMs(1000)) {
             for (PlayerEntity player : new ArrayList<>(mc.world.getPlayers())) {
