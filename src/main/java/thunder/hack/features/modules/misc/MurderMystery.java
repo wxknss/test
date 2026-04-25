@@ -1,8 +1,6 @@
 package thunder.hack.features.modules.misc;
 
-import io.netty.buffer.Unpooled;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.Entity;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.Item;
@@ -10,7 +8,6 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.item.ShearsItem;
 import net.minecraft.item.SwordItem;
-import net.minecraft.network.PacketByteBuf;
 import net.minecraft.network.packet.c2s.play.HandSwingC2SPacket;
 import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
 import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
@@ -70,34 +67,32 @@ public class MurderMystery extends Module {
         }
 
         if (event.getPacket() instanceof EntityEquipmentUpdateS2CPacket packet) {
-            int entityId = packet.getEntityId();
-            Entity entity = mc.world.getEntityById(entityId);
-            if (!(entity instanceof PlayerEntity player)) return;
-            if (player == mc.player) return;
-            if (!player.isAlive()) return;
-
             for (var pair : packet.getEquipmentList()) {
                 if (pair.getFirst() != EquipmentSlot.MAINHAND) continue;
                 Item heldItem = pair.getSecond().getItem();
                 if (heldItem == Items.AIR) continue;
 
-                if (killerTracker.getValue()) {
-                    if (server.getValue() == Server.Sword && heldItem instanceof SwordItem) {
-                        updateKiller(player.getName().getString());
-                    } else if (server.getValue() == Server.FunnyGame && heldItem instanceof ShearsItem) {
-                        updateKiller(player.getName().getString());
-                    }
-                }
+                for (PlayerEntity player : mc.world.getPlayers()) {
+                    if (player == mc.player) continue;
+                    if (!player.isAlive()) continue;
 
-                if (detectiveTracker.getValue()) {
-                    if (heldItem == Items.BOW) {
-                        String name = player.getName().getString();
-                        if (!name.equals(killerName)) {
-                            updateDetective(name);
+                    if (killerTracker.getValue()) {
+                        if (server.getValue() == Server.Sword && heldItem instanceof SwordItem) {
+                            updateKiller(player.getName().getString());
+                        } else if (server.getValue() == Server.FunnyGame && heldItem instanceof ShearsItem) {
+                            updateKiller(player.getName().getString());
+                        }
+                    }
+
+                    if (detectiveTracker.getValue()) {
+                        if (heldItem == Items.BOW) {
+                            String name = player.getName().getString();
+                            if (!name.equals(killerName)) {
+                                updateDetective(name);
+                            }
                         }
                     }
                 }
-                break;
             }
         }
     }
@@ -189,15 +184,10 @@ public class MurderMystery extends Module {
     }
 
     private PlayerEntity getEntityFromPacket(PlayerInteractEntityC2SPacket packet) {
-        PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
-        try {
-            packet.write(buf);
-            int entityId = buf.readVarInt();
-            Entity entity = mc.world.getEntityById(entityId);
-            if (entity instanceof PlayerEntity pe) return pe;
-        } catch (Exception ignored) {
-        } finally {
-            buf.release();
+        for (PlayerEntity player : mc.world.getPlayers()) {
+            if (player.getId() == packet.getEntityId()) {
+                return player;
+            }
         }
         return null;
     }
