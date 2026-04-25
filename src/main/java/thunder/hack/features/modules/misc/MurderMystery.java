@@ -58,15 +58,19 @@ public class MurderMystery extends Module {
         }
 
         if (event.getPacket() instanceof EntityEquipmentUpdateS2CPacket packet) {
-            for (var pair : packet.getEquipmentList()) {
-                if (pair.getFirst() != EquipmentSlot.MAINHAND) continue;
-                Item heldItem = pair.getSecond().getItem();
-                if (heldItem == Items.AIR) continue;
+            PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
+            try {
+                packet.write(buf);
+                int entityId = buf.readVarInt();
+                Entity entity = mc.world.getEntityById(entityId);
+                if (!(entity instanceof PlayerEntity player)) return;
+                if (player == mc.player) return;
+                if (!player.isAlive()) return;
 
-                for (PlayerEntity player : mc.world.getPlayers()) {
-                    if (player == mc.player) continue;
-                    if (!player.isAlive()) continue;
-                    if (player.getMainHandStack().getItem() != heldItem) continue;
+                for (var pair : packet.getEquipmentList()) {
+                    if (pair.getFirst() != EquipmentSlot.MAINHAND) continue;
+                    Item heldItem = pair.getSecond().getItem();
+                    if (heldItem == Items.AIR) continue;
 
                     if (killerTracker.getValue()) {
                         if (server.getValue() == Server.Sword && heldItem instanceof SwordItem) {
@@ -84,7 +88,11 @@ public class MurderMystery extends Module {
                             }
                         }
                     }
+                    break;
                 }
+            } catch (Exception ignored) {
+            } finally {
+                buf.release();
             }
         }
     }
@@ -156,7 +164,6 @@ public class MurderMystery extends Module {
             });
         }
     }
-
 
     private boolean isWeapon(ItemStack stack) {
         if (stack.isEmpty()) return false;
