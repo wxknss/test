@@ -104,8 +104,12 @@ public class ServerHelper extends Module {
 
             if (autoGM3.getValue()) {
                 String msg = pac.content().getString();
-                if (msg.contains("Вы вышли из режима наблюдения за игроком")) {
-                    mc.player.networkHandler.sendCommand("gm 3");
+                int index = msg.indexOf("[■] Вы вышли из режима наблюдения за игроком");
+                if (index != -1) {
+                    String before = msg.substring(0, index);
+                    if (!before.matches(".*[а-яА-Яa-zA-Z].*")) {
+                        mc.player.networkHandler.sendCommand("gm 3");
+                    }
                 }
             }
 
