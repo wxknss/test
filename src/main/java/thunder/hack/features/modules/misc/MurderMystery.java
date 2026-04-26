@@ -20,6 +20,7 @@ import net.minecraft.text.Text;
 import net.minecraft.text.TextColor;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Hand;
+import thunder.hack.core.Managers;
 import thunder.hack.events.impl.PacketEvent;
 import thunder.hack.features.modules.Module;
 import thunder.hack.setting.Setting;
@@ -49,7 +50,6 @@ public class MurderMystery extends Module {
     private String killerName = null;
     private final Set<String> detectiveNames = new HashSet<>();
     private final Timer chatTimer = new Timer();
-    private final Timer scanTimer = new Timer();
     private boolean sending = false;
 
     @Override
@@ -57,7 +57,6 @@ public class MurderMystery extends Module {
         killerName = null;
         detectiveNames.clear();
         chatTimer.reset();
-        scanTimer.reset();
     }
 
     @Override
@@ -122,27 +121,24 @@ public class MurderMystery extends Module {
             return;
         }
 
-        if (scanTimer.passedMs(1000)) {
-            for (PlayerEntity player : new ArrayList<>(mc.world.getPlayers())) {
-                if (player == mc.player) continue;
-                ItemStack held = player.getMainHandStack();
-                if (held.isEmpty()) continue;
+        for (PlayerEntity player : new ArrayList<>(mc.world.getPlayers())) {
+            if (player == mc.player) continue;
+            ItemStack held = player.getMainHandStack();
+            if (held.isEmpty()) continue;
 
-                String name = player.getName().getString();
+            String name = player.getName().getString();
 
-                if (killerTracker.getValue()) {
-                    if (held.getItem() instanceof ShearsItem || held.getItem() == Items.IRON_SWORD) {
-                        updateKiller(name);
-                    }
-                }
-
-                if (detectiveTracker.getValue()) {
-                    if (held.getItem() == Items.BOW && !name.equals(killerName)) {
-                        updateDetective(name);
-                    }
+            if (killerTracker.getValue()) {
+                if (held.getItem() instanceof ShearsItem || held.getItem() == Items.IRON_SWORD) {
+                    updateKiller(name);
                 }
             }
-            scanTimer.reset();
+
+            if (detectiveTracker.getValue()) {
+                if (held.getItem() == Items.BOW && !name.equals(killerName)) {
+                    updateDetective(name);
+                }
+            }
         }
     }
 
@@ -160,8 +156,10 @@ public class MurderMystery extends Module {
 
             displayKillerNotification(killerName);
             if (publicChat.getValue() && chatTimer.passedMs(5100)) {
-                sendPublicMessage(publicMsg);
-                chatTimer.reset();
+                if (!Managers.FRIEND.isFriend(killerName)) {
+                    sendPublicMessage(publicMsg);
+                    chatTimer.reset();
+                }
             }
         }
     }
@@ -178,7 +176,7 @@ public class MurderMystery extends Module {
 
         Text prefixText = Text.literal(prefix + " ");
         Text warn1 = Text.literal("⚠ ").setStyle(Style.EMPTY.withColor(TextColor.fromRgb(0xFF0000)));
-        Text playerName = Text.literal(name).setStyle(Style.EMPTY.withColor(TextColor.fromRgb(0xFFFFFF)));
+        Text playerName = Text.literal(name).setStyle(Style.EMPTY.withColor(TextColor.fromRgb(0xFF0000)));
         Text warn2 = Text.literal(" убийца ").setStyle(Style.EMPTY.withColor(TextColor.fromRgb(0xFF0000)));
         Text warn3 = Text.literal("⚠").setStyle(Style.EMPTY.withColor(TextColor.fromRgb(0xFF0000)));
 
@@ -191,7 +189,7 @@ public class MurderMystery extends Module {
 
         Text prefixText = Text.literal(prefix + " ");
         Text warn1 = Text.literal("⚠ ").setStyle(Style.EMPTY.withColor(TextColor.fromRgb(0x00AAAA)));
-        Text playerName = Text.literal(name).setStyle(Style.EMPTY.withColor(TextColor.fromRgb(0xFFFFFF)));
+        Text playerName = Text.literal(name).setStyle(Style.EMPTY.withColor(TextColor.fromRgb(0x00AAAA)));
         Text warn2 = Text.literal(" детектив ").setStyle(Style.EMPTY.withColor(TextColor.fromRgb(0x00AAAA)));
         Text warn3 = Text.literal("⚠").setStyle(Style.EMPTY.withColor(TextColor.fromRgb(0x00AAAA)));
 
