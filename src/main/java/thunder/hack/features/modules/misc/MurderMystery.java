@@ -36,11 +36,11 @@ public class MurderMystery extends Module {
     }
 
     private final Setting<Boolean> killerTracker = new Setting<>("KillerTracker", true);
-    private final Setting<Boolean> detectiveTracker = new Setting<>("DetectiveTracker", false);
+    private final Setting<Boolean> detectiveTracker = new Setting<>("DetectiveTracker", true);
     private final Setting<Server> server = new Setting<>("Server", Server.FunnyGame);
     private final Setting<Boolean> publicChat = new Setting<>("PublicChat", false);
+    private final Setting<Message> message = new Setting<>("Message", Message.New, v -> publicChat.getValue());
     public final Setting<Boolean> NameColors = new Setting<>("NameColors", true);
-    private final Setting<Message> message = new Setting<>("Message", Message.New);
     private final Setting<Boolean> silentSwap = new Setting<>("SilentSwap", false);
     private final Setting<Boolean> noSwing = new Setting<>("NoSwing", false, v -> silentSwap.getValue());
 
@@ -115,12 +115,6 @@ public class MurderMystery extends Module {
         if (fullNullCheck()) return;
         if (!isEnabled()) return;
 
-        if (mc.world.getPlayers().size() < 3) {
-            killerName = null;
-            detectiveNames.clear();
-            return;
-        }
-
         for (PlayerEntity player : new ArrayList<>(mc.world.getPlayers())) {
             if (player == mc.player) continue;
             ItemStack held = player.getMainHandStack();
@@ -176,7 +170,7 @@ public class MurderMystery extends Module {
 
         Text prefixText = Text.literal(prefix + " ");
         Text warn1 = Text.literal("⚠ ").setStyle(Style.EMPTY.withColor(TextColor.fromRgb(0xFF0000)));
-        Text playerName = Text.literal(name).setStyle(Style.EMPTY.withColor(TextColor.fromRgb(0xFF0000)));
+        Text playerName = Text.literal(name);
         Text warn2 = Text.literal(" убийца ").setStyle(Style.EMPTY.withColor(TextColor.fromRgb(0xFF0000)));
         Text warn3 = Text.literal("⚠").setStyle(Style.EMPTY.withColor(TextColor.fromRgb(0xFF0000)));
 
@@ -189,7 +183,7 @@ public class MurderMystery extends Module {
 
         Text prefixText = Text.literal(prefix + " ");
         Text warn1 = Text.literal("⚠ ").setStyle(Style.EMPTY.withColor(TextColor.fromRgb(0x00AAAA)));
-        Text playerName = Text.literal(name).setStyle(Style.EMPTY.withColor(TextColor.fromRgb(0x00AAAA)));
+        Text playerName = Text.literal(name);
         Text warn2 = Text.literal(" детектив ").setStyle(Style.EMPTY.withColor(TextColor.fromRgb(0x00AAAA)));
         Text warn3 = Text.literal("⚠").setStyle(Style.EMPTY.withColor(TextColor.fromRgb(0x00AAAA)));
 
