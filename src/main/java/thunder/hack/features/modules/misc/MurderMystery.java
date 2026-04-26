@@ -38,8 +38,8 @@ public class MurderMystery extends Module {
 
     private final Setting<Boolean> killerTracker = new Setting<>("KillerTracker", true);
     private final Setting<Boolean> detectiveTracker = new Setting<>("DetectiveTracker", true);
-    private final Setting<Server> server = new Setting<>("Server", Server.FunnyGame);
     private final Setting<Boolean> ignoreNPC = new Setting<>("IgnoreNPC", false);
+    private final Setting<Server> server = new Setting<>("Server", Server.FunnyGame);
     private final Setting<Boolean> publicChat = new Setting<>("PublicChat", false);
     private final Setting<Message> message = new Setting<>("Message", Message.New, v -> publicChat.getValue());
     public final Setting<Boolean> NameColors = new Setting<>("NameColors", true);
