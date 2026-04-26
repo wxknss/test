@@ -66,7 +66,7 @@ public class ServerHelper extends Module {
     private final Setting<GroupBy> groupBy = new Setting<>("GroupBy", GroupBy.ItemType, v -> aucHelper.getValue());
     private final Setting<Integer> contrast = new Setting<>("Contrast", 4, 1, 15, v -> aucHelper.getValue());
 
-    private enum Mode { Back, Home, Spawn, Warp }
+    private enum Mode { Spawn, Warp, Home, Back }
     private enum GroupBy { Name, ItemType }
 
     private final Timer pvpTimer = new Timer();
@@ -136,10 +136,10 @@ public class ServerHelper extends Module {
             sendMessage(String.valueOf(log));
 
             switch (antiTpMode.getValue()) {
-                case Back -> mc.player.networkHandler.sendCommand("back");
-                case Home -> mc.player.networkHandler.sendCommand("home");
                 case Spawn -> mc.player.networkHandler.sendCommand("spawn");
                 case Warp -> mc.player.networkHandler.sendCommand("warp pvp");
+                case Home -> mc.player.networkHandler.sendCommand("home");
+                case Back -> mc.player.networkHandler.sendCommand("back");
             }
             flag = false;
         }
