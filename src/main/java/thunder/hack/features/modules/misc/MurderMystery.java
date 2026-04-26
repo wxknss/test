@@ -21,14 +21,18 @@ import net.minecraft.text.TextColor;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Hand;
 import thunder.hack.core.Managers;
+import thunder.hack.core.manager.client.ModuleManager;
 import thunder.hack.events.impl.PacketEvent;
 import thunder.hack.features.modules.Module;
+import thunder.hack.features.modules.combat.AntiBot;
 import thunder.hack.setting.Setting;
 import thunder.hack.utility.Timer;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.UUID;
 
 public class MurderMystery extends Module {
     public MurderMystery() {
@@ -42,10 +46,12 @@ public class MurderMystery extends Module {
     private final Setting<Message> message = new Setting<>("Message", Message.New, v -> publicChat.getValue());
     public final Setting<Boolean> NameColors = new Setting<>("NameColors", true);
     private final Setting<Boolean> silentSwap = new Setting<>("SilentSwap", false);
+    private final Setting<IgnoreNPC> ignoreNPC = new Setting<>("IgnoreNPC", IgnoreNPC.Off, v -> killerTracker.getValue() || detectiveTracker.getValue());
     private final Setting<Boolean> noSwing = new Setting<>("NoSwing", false, v -> silentSwap.getValue());
 
     private enum Server { FunnyGame, Sword }
     private enum Message { RU, EN, New, Hearts }
+    private enum IgnoreNPC { Off, UUIDAntiBot, Color }
 
     private String killerName = null;
     private final Set<String> detectiveNames = new HashSet<>();
@@ -54,6 +60,7 @@ public class MurderMystery extends Module {
 
     @Override
     public void onEnable() {
+        debug("onEnable — сброс данных");
         killerName = null;
         detectiveNames.clear();
         chatTimer.reset();
@@ -61,6 +68,7 @@ public class MurderMystery extends Module {
 
     @Override
     public void onDisable() {
+        debug("onDisable — сброс данных");
         killerName = null;
         detectiveNames.clear();
     }
@@ -71,6 +79,7 @@ public class MurderMystery extends Module {
         if (!isEnabled()) return;
 
         if (event.getPacket() instanceof PlayerListS2CPacket) {
+            debug("PlayerListS2CPacket — сброс данных");
             killerName = null;
             detectiveNames.clear();
             chatTimer.reset();
@@ -78,31 +87,46 @@ public class MurderMystery extends Module {
         }
 
         if (event.getPacket() instanceof EntityEquipmentUpdateS2CPacket packet) {
+            debug("Получен EntityEquipmentUpdateS2CPacket");
             for (var pair : packet.getEquipmentList()) {
                 if (pair.getFirst() != EquipmentSlot.MAINHAND) continue;
                 Item heldItem = pair.getSecond().getItem();
-                if (heldItem == Items.AIR) continue;
+                if (heldItem == Items.AIR) {
+                    debug("Предмет AIR — пропуск");
+                    continue;
+                }
+                debug("Предмет в пакете: " + heldItem.getTranslationKey());
 
                 PlayerEntity target = null;
                 for (PlayerEntity player : mc.world.getPlayers()) {
                     if (player == mc.player) continue;
                     if (player.getMainHandStack().getItem() == heldItem) {
+                        if (shouldIgnore(player)) {
+                            debug("Игрок " + player.getName().getString() + " проигнорирован (IgnoreNPC=" + ignoreNPC.getValue() + ")");
+                            continue;
+                        }
                         target = player;
                         break;
                     }
                 }
-                if (target == null) continue;
+                if (target == null) {
+                    debug("Игрок с таким предметом не найден");
+                    continue;
+                }
 
                 String name = target.getName().getString();
+                debug("Найден игрок: " + name + " с предметом " + heldItem.getTranslationKey());
 
                 if (killerTracker.getValue()) {
                     if (heldItem instanceof ShearsItem || heldItem == Items.IRON_SWORD) {
+                        debug("Это оружие убийцы!");
                         updateKiller(name);
                     }
                 }
 
                 if (detectiveTracker.getValue()) {
                     if (heldItem == Items.BOW && !name.equals(killerName)) {
+                        debug("Это лук детектива!");
                         updateDetective(name);
                     }
                 }
@@ -117,6 +141,8 @@ public class MurderMystery extends Module {
 
         for (PlayerEntity player : new ArrayList<>(mc.world.getPlayers())) {
             if (player == mc.player) continue;
+            if (shouldIgnore(player)) continue;
+
             ItemStack held = player.getMainHandStack();
             if (held.isEmpty()) continue;
 
@@ -136,8 +162,27 @@ public class MurderMystery extends Module {
         }
     }
 
+    private boolean shouldIgnore(PlayerEntity player) {
+        return switch (ignoreNPC.getValue()) {
+            case UUIDAntiBot -> {
+                UUID offlineUUID = UUID.nameUUIDFromBytes(("OfflinePlayer:" + player.getName().getString()).getBytes(StandardCharsets.UTF_8));
+                boolean isBot = !player.getUuid().equals(offlineUUID);
+                if (isBot) debug("UUIDAntiBot: " + player.getName().getString() + " — бот");
+                yield isBot;
+            }
+            case Color -> {
+                String displayName = player.getDisplayName().getString();
+                boolean hasColor = !displayName.contains("§f") && !displayName.contains("§7") && !displayName.startsWith("§f") && !displayName.startsWith("§7");
+                if (hasColor) debug("Color: " + player.getName().getString() + " — цветной ник, не белый/серый");
+                yield hasColor;
+            }
+            default -> false;
+        };
+    }
+
     private void updateKiller(String name) {
         if (name != null && !name.equals(killerName)) {
+            debug("updateKiller: новый убийца — " + name + " (старый: " + killerName + ")");
             killerName = name;
             String publicMsg;
 
@@ -151,8 +196,11 @@ public class MurderMystery extends Module {
             displayKillerNotification(killerName);
             if (publicChat.getValue() && chatTimer.passedMs(5100)) {
                 if (!Managers.FRIEND.isFriend(killerName)) {
+                    debug("Отправка в публичный чат: " + publicMsg);
                     sendPublicMessage(publicMsg);
                     chatTimer.reset();
+                } else {
+                    debug("Убийца в друзьях — пропуск публичного чата");
                 }
             }
         }
@@ -160,6 +208,7 @@ public class MurderMystery extends Module {
 
     private void updateDetective(String name) {
         if (name != null && detectiveNames.add(name)) {
+            debug("updateDetective: новый детектив — " + name);
             displayDetectiveNotification(name);
         }
     }
@@ -206,6 +255,8 @@ public class MurderMystery extends Module {
             if (weaponSlot == -1) return;
             if (isWeapon(mc.player.getInventory().getStack(mc.player.getInventory().selectedSlot))) return;
 
+            debug("SilentSwap: цель " + target.getName().getString() + ", оружие в слоте " + weaponSlot);
+
             sending = true;
             event.cancel();
 
@@ -214,6 +265,8 @@ public class MurderMystery extends Module {
 
             if (!noSwing.getValue()) {
                 sendPacket(new HandSwingC2SPacket(Hand.MAIN_HAND));
+            } else {
+                debug("NoSwing: анимация скрыта");
             }
 
             sendPacket(new UpdateSelectedSlotC2SPacket(mc.player.getInventory().selectedSlot));
